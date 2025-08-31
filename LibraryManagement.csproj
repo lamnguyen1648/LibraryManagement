@@ -8,4 +8,35 @@
         <ImplicitUsings>enable</ImplicitUsings>
     </PropertyGroup>
 
+    <ItemGroup>
+      <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.1" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Compile Update="Forms\LoginForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\MainForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\QuanLySach\QuanLySachForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\QuanLySach\ThemSachForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\QuanLySach\SuaSachForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\QuanLyNXB\QuanLyNXBForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\QuanLyNhaXuatBan\ThemNxbForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\QuanLyNhaXuatBan\SuaNxbForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+    </ItemGroup>
+
 </Project>
