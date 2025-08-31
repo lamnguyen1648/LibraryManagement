@@ -4,22 +4,31 @@ using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 using LibraryManagement.Forms.QuanLyNhaXuatBan;
+using LibraryManagement.Forms.QuanLyTheLoai;
 using Microsoft.Data.SqlClient;
 
 namespace LibraryManagement.Forms.QuanLySach
 {
     public partial class QuanLySachForm : Form
     {
-        private const string TableName = "Sach";
+        private const string TableName    = "Sach";
         private const string IdColumnName = "Sach_ID"; // adjust if your PK differs
 
+        // Hide technical columns + FK ids (we will show *_Name instead)
         private static readonly string[] HiddenColumns =
         {
-            "ID", "Sach_ID", "TinhTrangSach", "QR_Code"
+            "ID", "Sach_ID", "TinhTrangSach", "QR_Code",
+            "NXB_ID", "TG_ID", "TL_ID"
         };
 
+        // Data
         private readonly DataTable _books = new DataTable();
         private readonly BindingSource _bs = new BindingSource();
+
+        // Resolved lookup meta (auto-detected once)
+        private string? _nxbTable, _nxbIdCol, _nxbNameCol;
+        private string? _tgTable,  _tgIdCol,  _tgNameCol;
+        private string? _tlTable,  _tlIdCol,  _tlNameCol;
 
         public QuanLySachForm()
         {
@@ -27,39 +36,38 @@ namespace LibraryManagement.Forms.QuanLySach
 
             Load += (_, __) => ReloadBooks();
 
+            // Wiring (clear first to avoid duplicate handlers)
             btnQuanLyNXB.Click       -= BtnQuanLyNXB_Click;
-            btnQuanLyNXB.Click       += BtnQuanLyNXB_Click;
-
             btnQuanLyTheLoai.Click   -= BtnQuanLyTheLoai_Click;
-            btnQuanLyTheLoai.Click   += BtnQuanLyTheLoai_Click;
-
             btnQuanLyTacGia.Click    -= BtnQuanLyTacGia_Click;
-            btnQuanLyTacGia.Click    += BtnQuanLyTacGia_Click;
-
             btnThemSach.Click        -= btnThemSach_Click;
-            btnThemSach.Click        += btnThemSach_Click;
-
             btnTimKiem.Click         -= BtnTimKiem_Click;
+            btnXoaNhieu.Click        -= BtnXoaNhieu_Click;
+
+            btnQuanLyNXB.Click       += BtnQuanLyNXB_Click;
+            btnQuanLyTheLoai.Click   += BtnQuanLyTheLoai_Click;
+            btnQuanLyTacGia.Click    += BtnQuanLyTacGia_Click;
+            btnThemSach.Click        += btnThemSach_Click;
             btnTimKiem.Click         += BtnTimKiem_Click;
+            btnXoaNhieu.Click        += BtnXoaNhieu_Click;
 
             btnXoaNhieu.Enabled = false;
-            btnXoaNhieu.Click   -= BtnXoaNhieu_Click;
-            btnXoaNhieu.Click   += BtnXoaNhieu_Click;
 
             // Grid behavior
             dgvBooks.AutoGenerateColumns = false;
-            dgvBooks.CellPainting += DgvBooks_CellPainting;       // draw Sửa/Xóa buttons
-            dgvBooks.CellMouseClick += DgvBooks_CellMouseClick;   // handle Sửa/Xóa clicks
+            dgvBooks.CellPainting += DgvBooks_CellPainting;       // draw Sửa/Xóa
+            dgvBooks.CellMouseClick += DgvBooks_CellMouseClick;   // handle clicks
             dgvBooks.CurrentCellDirtyStateChanged += DgvBooks_CurrentCellDirtyStateChanged;
             dgvBooks.CellValueChanged += DgvBooks_CellValueChanged;
-            dgvBooks.Sorted += (_, __) => UpdateSttValues();      // refresh STT after sort
             dgvBooks.DataBindingComplete += (_, __) => UpdateSttValues();
+            dgvBooks.Sorted += (_, __) => UpdateSttValues();
 
             _bs.DataSource = _books;
             dgvBooks.DataSource = _bs;
         }
 
-        private void BtnQuanLyNXB_Click(object? sender, EventArgs e)
+        // ===== Toolbar actions =====
+        private void BtnQuanLyNXB_Click(object? s, EventArgs e)
         {
             using (var f = new QuanLyNxbForm())
             {
@@ -67,62 +75,133 @@ namespace LibraryManagement.Forms.QuanLySach
                 var result = f.ShowDialog(this);
                 Show();
                 if (result == DialogResult.OK)
-                {
-                    // Optional: refresh books view after coming back, if needed
                     ReloadBooks(txtSearch.Text?.Trim());
-                }
             }
         }
-        private void BtnQuanLyTheLoai_Click(object? s, EventArgs e)=> MessageBox.Show("TODO: Mở quản lý thể loại", "Placeholder");
-        private void BtnQuanLyTacGia_Click(object? s, EventArgs e) => MessageBox.Show("TODO: Mở quản lý tác giả", "Placeholder");
+        private void BtnQuanLyTheLoai_Click(object? s, EventArgs e)
+        {
+            using (var f = new QuanLyTheLoaiForm())
+            {
+                Hide();
+                var result = f.ShowDialog(this);
+                Show();
+                if (result == DialogResult.OK)
+                    ReloadBooks(txtSearch.Text?.Trim());
+            }
+        }
+        private void BtnQuanLyTacGia_Click(object? s, EventArgs e)
+        {
+            using (var f = new LibraryManagement.Forms.QuanLyTacGia.QuanLyTacGiaForm())
+            {
+                Hide();
+                var result = f.ShowDialog(this);
+                Show();
+                if (result == DialogResult.OK)
+                    ReloadBooks(txtSearch.Text?.Trim());
+            }
+        }
 
         private void BtnTimKiem_Click(object? s, EventArgs e) => ReloadBooks(txtSearch.Text?.Trim());
-        private void BtnXoaNhieu_Click(object? s, EventArgs e) => BulkDeleteSelected();
 
-        // Open ThemSachForm
         private void btnThemSach_Click(object? sender, EventArgs e)
         {
             using (var f = new ThemSachForm())
             {
-                var result = f.ShowDialog(this);
-                if (result == DialogResult.OK)
-                {
+                if (f.ShowDialog(this) == DialogResult.OK)
                     ReloadBooks(txtSearch.Text?.Trim());
-                }
             }
         }
 
-        // Load data (initial or search) — keep existing columns to preserve widths
+        private void BtnXoaNhieu_Click(object? s, EventArgs e) => BulkDeleteSelected();
+
+        // ===== Data loading (JOIN to show names) =====
         private void ReloadBooks(string? search = null)
         {
             _books.Clear();
 
             using var conn = Db.Create();
-            using var cmd = conn.CreateCommand();
+            using var cmd  = conn.CreateCommand();
+            conn.Open();
 
-            if (string.IsNullOrWhiteSpace(search))
-            {
-                cmd.CommandText = $"select * from {TableName}";
-            }
-            else
-            {
-                // adjust TenSach if your title column differs
-                cmd.CommandText = $"select * from {TableName} where TenSach like N'%' + @q + N'%'";
-                cmd.Parameters.Add(new SqlParameter("@q", SqlDbType.NVarChar, 255) { Value = search });
-            }
+            if (_nxbTable == null && _tgTable == null && _tlTable == null)
+                ResolveLookups(conn);
+
+            bool withSearch = !string.IsNullOrWhiteSpace(search);
+            cmd.CommandText = BuildSelectSql(withSearch);
+            if (withSearch)
+                cmd.Parameters.Add(new SqlParameter("@q", SqlDbType.NVarChar, 255) { Value = search! });
 
             using var da = new SqlDataAdapter(cmd);
             da.Fill(_books);
 
-            BuildGridColumnsIfNeeded(); // build once
-            EnsureHiddenColumns();      // enforce hidden cols every load
-            LocalizeHeaders();          // ensure localized headers
+            BuildGridColumnsIfNeeded(); // build once to keep widths stable
+            EnsureHiddenColumns();      // hide *_ID etc.
+            LocalizeHeaders();          // VN headers (incl. *_Name)
             UpdateEmptyState();
             UpdateBulkDeleteButtonState();
             UpdateSttValues();
         }
 
-        // Build grid columns once (Select | STT | DB cols | Function)
+        private static (string table, string id, string name)? TryResolveLookup(
+            SqlConnection conn, string[] tableCandidates, string[] idCandidates, string[] nameCandidates)
+        {
+            foreach (var t in tableCandidates)
+            {
+                try
+                {
+                    using var probe = new SqlCommand($"SELECT TOP(1) * FROM {t}", conn);
+                    using var da = new SqlDataAdapter(probe);
+                    var tmp = new DataTable();
+                    da.Fill(tmp);
+                    if (tmp.Columns.Count == 0) continue;
+
+                    var id   = idCandidates.FirstOrDefault(c => tmp.Columns.Contains(c));
+                    var name = nameCandidates.FirstOrDefault(c => tmp.Columns.Contains(c));
+                    if (id != null && name != null) return (t, id, name);
+                }
+                catch { /* try next */ }
+            }
+            return null;
+        }
+
+        private void ResolveLookups(SqlConnection conn)
+        {
+            var nxb = TryResolveLookup(conn,
+                new[] { "NXB", "NhaXuatBan" },
+                new[] { "NXB_ID", "ID" },
+                new[] { "TenNXB", "Ten", "TenNhaXuatBan" });
+            if (nxb.HasValue) { _nxbTable = nxb.Value.table; _nxbIdCol = nxb.Value.id; _nxbNameCol = nxb.Value.name; }
+
+            var tg = TryResolveLookup(conn,
+                new[] { "TacGia" },
+                new[] { "TG_ID", "ID" },
+                new[] { "TenTG", "HoTen", "TenTacGia" });
+            if (tg.HasValue) { _tgTable = tg.Value.table; _tgIdCol = tg.Value.id; _tgNameCol = tg.Value.name; }
+
+            var tl = TryResolveLookup(conn,
+                new[] { "TheLoai" },
+                new[] { "TL_ID", "ID" },
+                new[] { "TenTL", "TenTheLoai", "Ten" });
+            if (tl.HasValue) { _tlTable = tl.Value.table; _tlIdCol = tl.Value.id; _tlNameCol = tl.Value.name; }
+        }
+
+        private string BuildSelectSql(bool withSearch)
+        {
+            // Stable alias columns for display: NXB_Name, TacGia_Name, TheLoai_Name
+            var select = $@"
+SELECT s.*,
+       {(_nxbTable != null ? $"n.[{_nxbNameCol}]  AS NXB_Name"     : "NULL AS NXB_Name")},
+       {(_tgTable  != null ? $"tg.[{_tgNameCol}]  AS TacGia_Name"  : "NULL AS TacGia_Name")},
+       {(_tlTable  != null ? $"tl.[{_tlNameCol}]  AS TheLoai_Name" : "NULL AS TheLoai_Name")}
+FROM {TableName} s
+{(_nxbTable != null ? $"LEFT JOIN {_nxbTable} n  ON s.NXB_ID = n.[{_nxbIdCol}] "   : "")}
+{(_tgTable  != null ? $"LEFT JOIN {_tgTable}  tg ON s.TG_ID  = tg.[{_tgIdCol}] "  : "")}
+{(_tlTable  != null ? $"LEFT JOIN {_tlTable}  tl ON s.TL_ID  = tl.[{_tlIdCol}] "  : "")}";
+            if (withSearch) select += "WHERE s.TenSach LIKE N'%' + @q + N'%' ";
+            return select;
+        }
+
+        // ===== Grid build / visuals =====
         private void BuildGridColumnsIfNeeded()
         {
             if (dgvBooks.Columns.Count > 0) return;
@@ -148,16 +227,15 @@ namespace LibraryManagement.Forms.QuanLySach
             };
             dgvBooks.Columns.Add(colStt);
 
-            // 3) DB columns (localized headers)
+            // 3) DB columns (from DataTable; we’ll hide technical ones later)
             foreach (DataColumn dc in _books.Columns)
             {
                 string colName = dc.ColumnName;
-
                 var col = new DataGridViewTextBoxColumn
                 {
                     DataPropertyName = colName,
                     Name = colName,
-                    HeaderText = ToVietnameseHeader(colName), // localized
+                    HeaderText = ToVietnameseHeader(colName),
                     ReadOnly = true,
                     AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
                     FillWeight = 1
@@ -177,7 +255,6 @@ namespace LibraryManagement.Forms.QuanLySach
             dgvBooks.Columns.Add(colFunc);
         }
 
-        // Hide columns that shouldn't show in UI
         private void EnsureHiddenColumns()
         {
             foreach (var name in HiddenColumns)
@@ -185,11 +262,10 @@ namespace LibraryManagement.Forms.QuanLySach
                 var col = dgvBooks.Columns[name];
                 if (col != null) col.Visible = false;
             }
-            var pkCol = dgvBooks.Columns[IdColumnName];
-            if (pkCol != null) pkCol.Visible = false;
+            var pk = dgvBooks.Columns[IdColumnName];
+            if (pk != null) pk.Visible = false;
         }
 
-        // Localize headers (in case schema changes between loads)
         private void LocalizeHeaders()
         {
             foreach (DataGridViewColumn c in dgvBooks.Columns)
@@ -199,7 +275,44 @@ namespace LibraryManagement.Forms.QuanLySach
             }
         }
 
-        // STT numbering (1-based)
+        // VN headers, including resolved *_Name columns
+        private static string ToVietnameseHeader(string col) => col.ToLowerInvariant() switch
+        {
+            "tensach"       => "Tên sách",
+            "namxuatban"    => "Năm xuất bản",
+            "tinhtrangsach" => "Tình trạng sách",
+
+            // FK ids (hidden) and display names
+            "nxb_id"        => "Nhà Xuất Bản",
+            "tg_id"         => "Tác Giả",
+            "tl_id"         => "Thể Loại",
+            "nxb_name"      => "Nhà Xuất Bản",
+            "tacgia_name"   => "Tác Giả",
+            "theloai_name"  => "Thể Loại",
+
+            "soluong"       => "Số lượng",
+            "gia"           => "Giá",
+            "mota"          => "Mô tả",
+            "ngaynhap"      => "Ngày nhập",
+            "vitri"         => "Vị trí",
+            "masach"        => "Mã sách",
+            _               => SplitPascal(col)
+        };
+
+        private static string SplitPascal(string s)
+        {
+            var chars = new System.Collections.Generic.List<char>(s.Length * 2);
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (i > 0 && char.IsUpper(c) && (char.IsLower(s[i - 1]) || (i + 1 < s.Length && char.IsLower(s[i + 1]))))
+                    chars.Add(' ');
+                chars.Add(c);
+            }
+            return new string(chars.ToArray());
+        }
+
+        // ===== STT / empty state =====
         private void UpdateSttValues()
         {
             var sttCol = dgvBooks.Columns["STT"];
@@ -212,21 +325,19 @@ namespace LibraryManagement.Forms.QuanLySach
                     row.Cells[sttCol.Index].Value = (i + 1).ToString();
             }
         }
-
         private void UpdateEmptyState() => lblEmpty.Visible = _books.Rows.Count == 0;
 
+        // ===== Checkbox & bulk delete enable =====
         private void DgvBooks_CurrentCellDirtyStateChanged(object? sender, EventArgs e)
         {
             if (dgvBooks.IsCurrentCellDirty && dgvBooks.CurrentCell is DataGridViewCheckBoxCell)
                 dgvBooks.CommitEdit(DataGridViewDataErrorContexts.Commit);
         }
-
         private void DgvBooks_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex >= 0 && dgvBooks.Columns[e.ColumnIndex].Name == "Select")
                 UpdateBulkDeleteButtonState();
         }
-
         private void UpdateBulkDeleteButtonState()
         {
             var selectCol = dgvBooks.Columns["Select"];
@@ -239,7 +350,7 @@ namespace LibraryManagement.Forms.QuanLySach
             btnXoaNhieu.Enabled = anyChecked;
         }
 
-        // Draw Sửa / Xóa buttons in Function column
+        // ===== Function buttons (Sửa/Xóa) =====
         private void DgvBooks_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
         {
             if (e.RowIndex < 0) return;
@@ -271,6 +382,7 @@ namespace LibraryManagement.Forms.QuanLySach
             var cell = dgvBooks.GetCellDisplayRectangle(e.ColumnIndex, e.RowIndex, false);
             int padding = Math.Max(2, cell.Height / 10);
             int btnWidth = (cell.Width - (padding * 3)) / 2;
+
             var editRect = new Rectangle(cell.X + padding, cell.Y + padding, btnWidth, cell.Height - (padding * 2));
             var delRect  = new Rectangle(editRect.Right + padding, cell.Y + padding, btnWidth, cell.Height - (padding * 2));
             var click    = dgvBooks.PointToClient(Cursor.Position);
@@ -281,24 +393,19 @@ namespace LibraryManagement.Forms.QuanLySach
 
         private void EditRow(int rowIndex)
         {
-            var row = dgvBooks.Rows[rowIndex];
-            var id = GetRowId(row);
+            var id = GetRowId(dgvBooks.Rows[rowIndex]);
             if (id == null) { MessageBox.Show("Không tìm thấy ID bản ghi.", "Lỗi"); return; }
 
             using (var f = new SuaSachForm(id.Value))
             {
-                var result = f.ShowDialog(this);
-                if (result == DialogResult.OK)
-                {
+                if (f.ShowDialog(this) == DialogResult.OK)
                     ReloadBooks(txtSearch.Text?.Trim());
-                }
             }
         }
 
         private void DeleteSingle(int rowIndex)
         {
-            var row = dgvBooks.Rows[rowIndex];
-            var id = GetRowId(row);
+            var id = GetRowId(dgvBooks.Rows[rowIndex]);
             if (id == null) { MessageBox.Show("Không tìm thấy ID bản ghi.", "Lỗi"); return; }
 
             var confirm = MessageBox.Show("Bạn có chắc muốn xóa bản ghi này?",
@@ -334,11 +441,38 @@ namespace LibraryManagement.Forms.QuanLySach
 
         private int? GetRowId(DataGridViewRow row)
         {
-            var pkCol = dgvBooks.Columns[IdColumnName] ?? dgvBooks.Columns["ID"];
-            if (pkCol == null) return null;
-
-            var val = row.Cells[pkCol.Index].Value?.ToString();
-            return int.TryParse(val, out int id) ? id : null;
+            try
+            {
+                // Prefer bound value
+                if (row.DataBoundItem is DataRowView drv)
+                {
+                    var obj = drv.Row[IdColumnName];
+                    if (obj != DBNull.Value && obj != null)
+                    {
+                        if (obj is int i) return i;
+                        if (obj is long l) return checked((int)l);
+                        if (int.TryParse(obj.ToString(), out var parsed)) return parsed;
+                    }
+                }
+                // Fallback: by cell
+                if (dgvBooks.Columns.Contains(IdColumnName))
+                {
+                    var val = row.Cells[IdColumnName].Value;
+                    if (val != null && val != DBNull.Value)
+                    {
+                        if (val is int i2) return i2;
+                        if (val is long l2) return checked((int)l2);
+                        if (int.TryParse(val.ToString(), out var parsed2)) return parsed2;
+                    }
+                }
+                if (dgvBooks.Columns.Contains("ID"))
+                {
+                    var val = row.Cells["ID"].Value;
+                    if (val != null && int.TryParse(val.ToString(), out var parsed3)) return parsed3;
+                }
+            }
+            catch { /* ignore */ }
+            return null;
         }
 
         private void ExecuteDeleteByIds(int[] ids)
@@ -347,44 +481,13 @@ namespace LibraryManagement.Forms.QuanLySach
             conn.Open();
 
             var parms = ids.Select((_, i) => $"@p{i}").ToArray();
-            var sql = $"delete from {TableName} where {IdColumnName} in ({string.Join(",", parms)})";
+            var sql = $"DELETE FROM {TableName} WHERE {IdColumnName} IN ({string.Join(",", parms)})";
 
             using var cmd = new SqlCommand(sql, conn);
             for (int i = 0; i < ids.Length; i++)
                 cmd.Parameters.Add(new SqlParameter(parms[i], SqlDbType.Int) { Value = ids[i] });
 
             cmd.ExecuteNonQuery();
-        }
-
-        // ===== Header localization helpers =====
-        private static string ToVietnameseHeader(string col) => col.ToLowerInvariant() switch
-        {
-            "tensach"       => "Tên sách",
-            "namxuatban"    => "Năm xuất bản",
-            "tinhtrangsach" => "Tình trạng sách",
-            "nxb_id"        => "Nhà Xuất Bản",
-            "tg_id"         => "Tác Giả",
-            "tl_id"         => "Thể Loại",
-            "soluong"       => "Số lượng",
-            "gia"           => "Giá",
-            "mota"          => "Mô tả",
-            "ngaynhap"      => "Ngày nhập",
-            "vitri"         => "Vị trí",
-            "masach"        => "Mã sách",
-            _               => SplitPascal(col)
-        };
-
-        private static string SplitPascal(string s)
-        {
-            var chars = new System.Collections.Generic.List<char>(s.Length * 2);
-            for (int i = 0; i < s.Length; i++)
-            {
-                char c = s[i];
-                if (i > 0 && char.IsUpper(c) && (char.IsLower(s[i - 1]) || (i + 1 < s.Length && char.IsLower(s[i + 1]))))
-                    chars.Add(' ');
-                chars.Add(c);
-            }
-            return new string(chars.ToArray());
         }
     }
 }

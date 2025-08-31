@@ -89,16 +89,16 @@ namespace LibraryManagement.Forms.QuanLySach
             btnQuanLyNXB.Dock = DockStyle.Fill;
             btnQuanLyNXB.Font = btnFont;
             btnQuanLyNXB.Margin = btnPad;
+            
+            btnQuanLyTacGia.Text = "Quản lý tác giả";
+            btnQuanLyTacGia.Dock = DockStyle.Fill;
+            btnQuanLyTacGia.Font = btnFont;
+            btnQuanLyTacGia.Margin = btnPad;
 
             btnQuanLyTheLoai.Text = "Quản lý thể loại";
             btnQuanLyTheLoai.Dock = DockStyle.Fill;
             btnQuanLyTheLoai.Font = btnFont;
             btnQuanLyTheLoai.Margin = btnPad;
-
-            btnQuanLyTacGia.Text = "Quản lý tác giả";
-            btnQuanLyTacGia.Dock = DockStyle.Fill;
-            btnQuanLyTacGia.Font = btnFont;
-            btnQuanLyTacGia.Margin = btnPad;
 
             btnThemSach.Text = "Thêm sách";
             btnThemSach.Dock = DockStyle.Fill;
@@ -123,7 +123,7 @@ namespace LibraryManagement.Forms.QuanLySach
 
             toolbar.Controls.AddRange(new Control[]
             {
-                btnQuanLyNXB, btnQuanLyTheLoai, btnQuanLyTacGia,
+                btnQuanLyNXB, btnQuanLyTacGia, btnQuanLyTheLoai,
                 btnThemSach, btnXoaNhieu, btnTimKiem, txtSearch
             });
 

@@ -5,32 +5,27 @@ using System.Linq;
 using System.Windows.Forms;
 using Microsoft.Data.SqlClient;
 
-namespace LibraryManagement.Forms.QuanLyNhaXuatBan
+namespace LibraryManagement.Forms.QuanLyTheLoai
 {
-    public partial class QuanLyNxbForm : Form
+    public partial class QuanLyTheLoaiForm : Form
     {
-        // Resolved at runtime to match your DB
-        private string? _tableName;     // "NXB" or "NhaXuatBan"
-        private string? _idColumnName;  // "NXB_ID" or "ID"
-        private string? _nameColumn;    // "TenNXB" | "Ten" | "TenNhaXuatBan"
-        private string? _emailColumn;   // "Email" | "Mail"
-        private string? _phoneColumn;   // "SoDienThoai" | "DienThoai" | "SDT" | "Phone"
+        // Auto-resolved from DB
+        private string? _tableName;      // "TheLoai"
+        private string? _idColumnName;   // "TL_ID" or "ID"
+        private string? _nameColumn;     // "TenTL" | "TenTheLoai" | "Ten"
 
-        private readonly DataTable _nxb = new DataTable();
+        private readonly DataTable _tl = new DataTable();
         private readonly BindingSource _bs = new BindingSource();
 
-        // Candidates for auto-detection
-        private static readonly string[] TableCandidates = { "NXB", "NhaXuatBan" };
-        private static readonly string[] IdCandidates    = { "NXB_ID", "ID" };
-        private static readonly string[] NameCandidates  = { "TenNXB", "Ten", "TenNhaXuatBan" };
-        private static readonly string[] EmailCandidates = { "Email", "Mail" };
-        private static readonly string[] PhoneCandidates = { "SoDienThoai", "DienThoai", "SDT", "Phone" };
+        private static readonly string[] TableCandidates = { "TheLoai" };
+        private static readonly string[] IdCandidates    = { "TL_ID", "ID" };
+        private static readonly string[] NameCandidates  = { "TenTL", "TenTheLoai", "Ten" };
 
-        public QuanLyNxbForm()
+        public QuanLyTheLoaiForm()
         {
             InitializeComponent();
 
-            Load              += (_, __) => ReloadNxb();
+            Load              += (_, __) => ReloadTheLoai();
             btnThem.Click     -= BtnThem_Click;
             btnThem.Click     += BtnThem_Click;
             btnXoaNhieu.Click -= BtnXoaNhieu_Click;
@@ -40,37 +35,39 @@ namespace LibraryManagement.Forms.QuanLyNhaXuatBan
 
             btnXoaNhieu.Enabled = false;
 
-            dgvNXB.AutoGenerateColumns = false;
-            dgvNXB.CurrentCellDirtyStateChanged += DgvNXB_CurrentCellDirtyStateChanged;
-            dgvNXB.CellValueChanged             += DgvNXB_CellValueChanged;
-            dgvNXB.DataBindingComplete          += (_, __) => UpdateSttValues();
-            dgvNXB.Sorted                       += (_, __) => UpdateSttValues();
+            dgvTheLoai.AutoGenerateColumns = false;
+            dgvTheLoai.CurrentCellDirtyStateChanged += Dgv_CurrentCellDirtyStateChanged;
+            dgvTheLoai.CellValueChanged             += Dgv_CellValueChanged;
+            dgvTheLoai.DataBindingComplete          += (_, __) => UpdateSttValues();
+            dgvTheLoai.Sorted                       += (_, __) => UpdateSttValues();
 
-            // Inline Sửa/Xóa buttons
-            dgvNXB.CellPainting   += DgvNXB_CellPainting;
-            dgvNXB.CellMouseClick += DgvNXB_CellMouseClick;
+            dgvTheLoai.CellPainting   += Dgv_CellPainting;   // draw Sửa/Xóa
+            dgvTheLoai.CellMouseClick += Dgv_CellMouseClick; // handle clicks
 
-            _bs.DataSource    = _nxb;
-            dgvNXB.DataSource = _bs;
+            _bs.DataSource = _tl;
+            dgvTheLoai.DataSource = _bs;
         }
 
-        // ==== Toolbar handlers ====
+        // ===== Toolbar =====
+        // in QuanLyTheLoaiForm.cs
         private void BtnThem_Click(object? s, EventArgs e)
         {
-            using (var f = new ThemNxbForm())
+            using (var f = new LibraryManagement.Forms.QuanLyTheLoai.ThemTheLoaiForm())
             {
                 if (f.ShowDialog(this) == DialogResult.OK)
-                    ReloadNxb(txtSearch.Text?.Trim());
+                    ReloadTheLoai(txtSearch.Text?.Trim());
             }
         }
-        private void BtnTimKiem_Click(object? s, EventArgs e) => ReloadNxb(txtSearch.Text?.Trim());
+
+
+        private void BtnTimKiem_Click(object? s, EventArgs e) => ReloadTheLoai(txtSearch.Text?.Trim());
 
         private void BtnXoaNhieu_Click(object? s, EventArgs e)
         {
-            var selectCol = dgvNXB.Columns["Select"];
+            var selectCol = dgvTheLoai.Columns["Select"];
             if (selectCol == null) return;
 
-            var ids = dgvNXB.Rows
+            var ids = dgvTheLoai.Rows
                 .Cast<DataGridViewRow>()
                 .Where(r => Convert.ToBoolean(r.Cells[selectCol.Index].Value ?? false))
                 .Select(GetRowId)
@@ -80,18 +77,18 @@ namespace LibraryManagement.Forms.QuanLyNhaXuatBan
 
             if (ids.Length == 0) return;
 
-            var confirm = MessageBox.Show($"Xóa {ids.Length} NXB đã chọn?", "Xóa nhiều NXB",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            var confirm = MessageBox.Show($"Xóa {ids.Length} thể loại đã chọn?",
+                "Xóa nhiều thể loại", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
             if (confirm != DialogResult.Yes) return;
 
             ExecuteDeleteByIds(ids);
-            ReloadNxb(txtSearch.Text?.Trim());
+            ReloadTheLoai(txtSearch.Text?.Trim());
         }
 
-        // ==== Data load ====
-        private void ReloadNxb(string? search = null)
+        // ===== Data =====
+        private void ReloadTheLoai(string? search = null)
         {
-            _nxb.Clear();
+            _tl.Clear();
 
             using var conn = Db.Create();
             using var cmd  = conn.CreateCommand();
@@ -101,7 +98,7 @@ namespace LibraryManagement.Forms.QuanLyNhaXuatBan
 
             if (_tableName == null)
             {
-                MessageBox.Show("Không tìm thấy bảng NXB/Nhà Xuất Bản.", "Lỗi");
+                MessageBox.Show("Không tìm thấy bảng Thể loại.", "Lỗi");
                 return;
             }
 
@@ -116,10 +113,10 @@ namespace LibraryManagement.Forms.QuanLyNhaXuatBan
             }
 
             using var da = new SqlDataAdapter(cmd);
-            da.Fill(_nxb);
+            da.Fill(_tl);
 
             BuildGridColumnsIfNeeded(); // once
-            EnsureHiddenIdColumn();     // keep ID hidden but bound
+            EnsureHiddenIdColumn();     // always enforce
             UpdateEmptyState();
             UpdateBulkDeleteButtonState();
             UpdateSttValues();
@@ -142,9 +139,6 @@ namespace LibraryManagement.Forms.QuanLyNhaXuatBan
                     _idColumnName = IdCandidates.FirstOrDefault(c => dt.Columns.Contains(c)) ?? dt.Columns[0].ColumnName;
                     _nameColumn   = NameCandidates.FirstOrDefault(c => dt.Columns.Contains(c))
                                     ?? dt.Columns.Cast<DataColumn>().FirstOrDefault(c => c.DataType == typeof(string))?.ColumnName;
-
-                    _emailColumn  = EmailCandidates.FirstOrDefault(c => dt.Columns.Contains(c));
-                    _phoneColumn  = PhoneCandidates.FirstOrDefault(c => dt.Columns.Contains(c));
                     return;
                 }
                 catch
@@ -154,10 +148,10 @@ namespace LibraryManagement.Forms.QuanLyNhaXuatBan
             }
         }
 
-        // ==== Grid build ====
+        // ===== Grid =====
         private void BuildGridColumnsIfNeeded()
         {
-            if (dgvNXB.Columns.Count > 0) return;
+            if (dgvTheLoai.Columns.Count > 0) return;
 
             // [0] Checkbox
             var colSelect = new DataGridViewCheckBoxColumn
@@ -167,7 +161,7 @@ namespace LibraryManagement.Forms.QuanLyNhaXuatBan
                 AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
                 FillWeight = 8
             };
-            dgvNXB.Columns.Add(colSelect);
+            dgvTheLoai.Columns.Add(colSelect);
 
             // [1] STT
             var colStt = new DataGridViewTextBoxColumn
@@ -178,53 +172,43 @@ namespace LibraryManagement.Forms.QuanLyNhaXuatBan
                 AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
                 FillWeight = 7
             };
-            dgvNXB.Columns.Add(colStt);
+            dgvTheLoai.Columns.Add(colStt);
 
-            // (Hidden ID gets inserted at index 2 by EnsureHiddenIdColumn)
+            // (Hidden ID inserted at index 2 by EnsureHiddenIdColumn)
 
-            // [3] Tên NXB
-            var colName = new DataGridViewTextBoxColumn
+            // Visible DB columns: name first (if present), then the rest (excluding ID & name)
+            if (_nameColumn != null && _tl.Columns.Contains(_nameColumn))
             {
-                Name = _nameColumn ?? "TenNXB",
-                DataPropertyName = _nameColumn ?? "TenNXB",
-                HeaderText = "Tên NXB",
-                ReadOnly = true,
-                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
-                FillWeight = 46
-            };
-            dgvNXB.Columns.Add(colName);
-
-            // [4] Email (if present)
-            if (_emailColumn != null && _nxb.Columns.Contains(_emailColumn))
-            {
-                var colEmail = new DataGridViewTextBoxColumn
+                var nameCol = new DataGridViewTextBoxColumn
                 {
-                    Name = _emailColumn,
-                    DataPropertyName = _emailColumn,
-                    HeaderText = "Email",
+                    Name = _nameColumn,
+                    DataPropertyName = _nameColumn,
+                    HeaderText = "Tên thể loại",
                     ReadOnly = true,
                     AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
-                    FillWeight = 28
+                    FillWeight = 46
                 };
-                dgvNXB.Columns.Add(colEmail);
+                dgvTheLoai.Columns.Add(nameCol);
             }
 
-            // [5] Số điện thoại (if present)
-            if (_phoneColumn != null && _nxb.Columns.Contains(_phoneColumn))
+            foreach (DataColumn dc in _tl.Columns)
             {
-                var colPhone = new DataGridViewTextBoxColumn
+                if (dc.ColumnName.Equals(_idColumnName, StringComparison.OrdinalIgnoreCase)) continue;
+                if (_nameColumn != null && dc.ColumnName.Equals(_nameColumn, StringComparison.OrdinalIgnoreCase)) continue;
+
+                var col = new DataGridViewTextBoxColumn
                 {
-                    Name = _phoneColumn,
-                    DataPropertyName = _phoneColumn,
-                    HeaderText = "Số điện thoại",
+                    Name = dc.ColumnName,
+                    DataPropertyName = dc.ColumnName,
+                    HeaderText = ToVietnameseHeader(dc.ColumnName),
                     ReadOnly = true,
                     AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
                     FillWeight = 18
                 };
-                dgvNXB.Columns.Add(colPhone);
+                dgvTheLoai.Columns.Add(col);
             }
 
-            // [6] Function
+            // [last] Function (Sửa/Xóa)
             var colFunc = new DataGridViewTextBoxColumn
             {
                 Name = "Function",
@@ -233,15 +217,14 @@ namespace LibraryManagement.Forms.QuanLyNhaXuatBan
                 AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
                 FillWeight = 12
             };
-            dgvNXB.Columns.Add(colFunc);
+            dgvTheLoai.Columns.Add(colFunc);
         }
 
-        // Ensure the hidden, bound ID column exists & stays hidden
         private void EnsureHiddenIdColumn()
         {
             if (_idColumnName == null) return;
 
-            if (!dgvNXB.Columns.Contains(_idColumnName))
+            if (!dgvTheLoai.Columns.Contains(_idColumnName))
             {
                 var idCol = new DataGridViewTextBoxColumn
                 {
@@ -250,59 +233,59 @@ namespace LibraryManagement.Forms.QuanLyNhaXuatBan
                     Visible = false,
                     ReadOnly = true
                 };
-                dgvNXB.Columns.Insert(2, idCol); // order: Select, STT, [ID hidden], Name, Email, Phone, Function
+                dgvTheLoai.Columns.Insert(2, idCol);
             }
             else
             {
-                dgvNXB.Columns[_idColumnName].Visible = false;
-                dgvNXB.Columns[_idColumnName].ReadOnly = true;
+                dgvTheLoai.Columns[_idColumnName].Visible = false;
+                dgvTheLoai.Columns[_idColumnName].ReadOnly = true;
             }
         }
 
-        private void UpdateEmptyState() => lblEmpty.Visible = _nxb.Rows.Count == 0;
+        private void UpdateEmptyState() => lblEmpty.Visible = _tl.Rows.Count == 0;
 
         private void UpdateSttValues()
         {
-            var sttCol = dgvNXB.Columns["STT"];
+            var sttCol = dgvTheLoai.Columns["STT"];
             if (sttCol == null) return;
 
-            for (int i = 0; i < dgvNXB.Rows.Count; i++)
+            for (int i = 0; i < dgvTheLoai.Rows.Count; i++)
             {
-                var row = dgvNXB.Rows[i];
+                var row = dgvTheLoai.Rows[i];
                 if (!row.IsNewRow)
                     row.Cells[sttCol.Index].Value = (i + 1).ToString();
             }
         }
 
-        private void DgvNXB_CurrentCellDirtyStateChanged(object? sender, EventArgs e)
+        private void Dgv_CurrentCellDirtyStateChanged(object? sender, EventArgs e)
         {
-            if (dgvNXB.IsCurrentCellDirty && dgvNXB.CurrentCell is DataGridViewCheckBoxCell)
-                dgvNXB.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            if (dgvTheLoai.IsCurrentCellDirty && dgvTheLoai.CurrentCell is DataGridViewCheckBoxCell)
+                dgvTheLoai.CommitEdit(DataGridViewDataErrorContexts.Commit);
         }
 
-        private void DgvNXB_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
+        private void Dgv_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
         {
-            if (e.RowIndex >= 0 && dgvNXB.Columns[e.ColumnIndex].Name == "Select")
+            if (e.RowIndex >= 0 && dgvTheLoai.Columns[e.ColumnIndex].Name == "Select")
                 UpdateBulkDeleteButtonState();
         }
 
         private void UpdateBulkDeleteButtonState()
         {
-            var selectCol = dgvNXB.Columns["Select"];
+            var selectCol = dgvTheLoai.Columns["Select"];
             if (selectCol == null) { btnXoaNhieu.Enabled = false; return; }
 
-            bool anyChecked = dgvNXB.Rows
+            bool anyChecked = dgvTheLoai.Rows
                 .Cast<DataGridViewRow>()
                 .Any(r => Convert.ToBoolean(r.Cells[selectCol.Index].Value ?? false));
 
             btnXoaNhieu.Enabled = anyChecked;
         }
 
-        // ==== Paint & click Function buttons ====
-        private void DgvNXB_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
+        // ===== Sửa/Xóa buttons =====
+        private void Dgv_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
         {
             if (e.RowIndex < 0) return;
-            if (dgvNXB.Columns[e.ColumnIndex].Name != "Function") return;
+            if (dgvTheLoai.Columns[e.ColumnIndex].Name != "Function") return;
 
             e.PaintBackground(e.ClipBounds, true);
             var cell = e.CellBounds;
@@ -321,18 +304,18 @@ namespace LibraryManagement.Forms.QuanLyNhaXuatBan
             e.Handled = true;
         }
 
-        private void DgvNXB_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
+        private void Dgv_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
         {
             if (e.RowIndex < 0) return;
             if (e.Button != MouseButtons.Left) return;
-            if (dgvNXB.Columns[e.ColumnIndex].Name != "Function") return;
+            if (dgvTheLoai.Columns[e.ColumnIndex].Name != "Function") return;
 
-            var cell   = dgvNXB.GetCellDisplayRectangle(e.ColumnIndex, e.RowIndex, false);
-            int pad    = Math.Max(2, cell.Height / 10);
-            int w      = (cell.Width - (pad * 3)) / 2;
-            var editR  = new Rectangle(cell.X + pad, cell.Y + pad, w, cell.Height - (pad * 2));
-            var delR   = new Rectangle(editR.Right + pad, cell.Y + pad, w, cell.Height - (pad * 2));
-            var click  = dgvNXB.PointToClient(Cursor.Position);
+            var cell  = dgvTheLoai.GetCellDisplayRectangle(e.ColumnIndex, e.RowIndex, false);
+            int pad   = Math.Max(2, cell.Height / 10);
+            int w     = (cell.Width - (pad * 3)) / 2;
+            var editR = new Rectangle(cell.X + pad, cell.Y + pad, w, cell.Height - (pad * 2));
+            var delR  = new Rectangle(editR.Right + pad, cell.Y + pad, w, cell.Height - (pad * 2));
+            var click = dgvTheLoai.PointToClient(Cursor.Position);
 
             if (editR.Contains(click)) EditRow(e.RowIndex);
             else if (delR.Contains(click)) DeleteSingle(e.RowIndex);
@@ -340,40 +323,31 @@ namespace LibraryManagement.Forms.QuanLyNhaXuatBan
 
         private void EditRow(int rowIndex)
         {
-            var row = dgvNXB.Rows[rowIndex];
+            var row = dgvTheLoai.Rows[rowIndex];
             var id  = GetRowId(row);
-            if (id == null)
-            {
-                MessageBox.Show("Không tìm thấy ID bản ghi.", "Lỗi");
-                return;
-            }
+            if (id == null) { MessageBox.Show("Không tìm thấy ID bản ghi.", "Lỗi"); return; }
 
-            using (var f = new SuaNxbForm(id.Value))
+            using (var f = new LibraryManagement.Forms.QuanLyTheLoai.SuaTheLoaiForm(id.Value))
             {
                 if (f.ShowDialog(this) == DialogResult.OK)
-                    ReloadNxb(txtSearch.Text?.Trim());
+                    ReloadTheLoai(txtSearch.Text?.Trim());
             }
         }
 
         private void DeleteSingle(int rowIndex)
         {
-            var row = dgvNXB.Rows[rowIndex];
+            var row = dgvTheLoai.Rows[rowIndex];
             var id  = GetRowId(row);
-            if (id == null)
-            {
-                MessageBox.Show("Không tìm thấy ID bản ghi.", "Lỗi");
-                return;
-            }
+            if (id == null) { MessageBox.Show("Không tìm thấy ID bản ghi.", "Lỗi"); return; }
 
             var confirm = MessageBox.Show("Bạn có chắc muốn xóa bản ghi này?",
-                "Xóa NXB", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                "Xóa thể loại", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
             if (confirm != DialogResult.Yes) return;
 
             ExecuteDeleteByIds(new[] { id.Value });
-            ReloadNxb(txtSearch.Text?.Trim());
+            ReloadTheLoai(txtSearch.Text?.Trim());
         }
 
-        // Prefer bound DataRowView -> fallback hidden cell -> fallback "ID"
         private int? GetRowId(DataGridViewRow row)
         {
             try
@@ -390,8 +364,7 @@ namespace LibraryManagement.Forms.QuanLyNhaXuatBan
                         if (int.TryParse(obj.ToString(), out var parsed)) return parsed;
                     }
                 }
-
-                if (dgvNXB.Columns.Contains(_idColumnName))
+                if (dgvTheLoai.Columns.Contains(_idColumnName))
                 {
                     var val = row.Cells[_idColumnName].Value;
                     if (val != null && val != DBNull.Value)
@@ -401,8 +374,7 @@ namespace LibraryManagement.Forms.QuanLyNhaXuatBan
                         if (int.TryParse(val.ToString(), out var parsed2)) return parsed2;
                     }
                 }
-
-                if (dgvNXB.Columns.Contains("ID"))
+                if (dgvTheLoai.Columns.Contains("ID"))
                 {
                     var val = row.Cells["ID"].Value;
                     if (val != null && int.TryParse(val.ToString(), out var parsed3)) return parsed3;
@@ -428,6 +400,31 @@ namespace LibraryManagement.Forms.QuanLyNhaXuatBan
                 cmd.Parameters.Add(new SqlParameter(parms[i], SqlDbType.Int) { Value = ids[i] });
 
             cmd.ExecuteNonQuery();
+        }
+
+        // ----- Header localization -----
+        private static string ToVietnameseHeader(string col) => col.ToLowerInvariant() switch
+        {
+            "tentl" or "tentheloai" or "ten" => "Tên thể loại",
+            "mota"       => "Mô tả",
+            "ghichu"     => "Ghi chú",
+            "trangthai"  => "Trạng thái",
+            "ngaytao"    => "Ngày tạo",
+            "ngaycapnhat"=> "Cập nhật",
+            _            => SplitPascal(col)
+        };
+
+        private static string SplitPascal(string s)
+        {
+            var chars = new System.Collections.Generic.List<char>(s.Length * 2);
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (i > 0 && char.IsUpper(c) && (char.IsLower(s[i - 1]) || (i + 1 < s.Length && char.IsLower(s[i + 1]))))
+                    chars.Add(' ');
+                chars.Add(c);
+            }
+            return new string(chars.ToArray());
         }
     }
 }

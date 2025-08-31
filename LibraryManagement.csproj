@@ -37,6 +37,24 @@
       <Compile Update="Forms\QuanLyNhaXuatBan\SuaNxbForm.cs">
         <SubType>Form</SubType>
       </Compile>
+      <Compile Update="Forms\QuanLyTheLoai\QuanLyTheLoaiForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\QuanLyTheLoai\ThemTheLoaiForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\QuanLyTheLoai\SuaTheLoaiForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\QuanLyTacGia\QuanLyTacGiaForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\QuanLyTacGia\ThemTacGiaForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\QuanLyTacGia\SuaTacGiaForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
     </ItemGroup>
 
 </Project>
