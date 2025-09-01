@@ -1,490 +1,371 @@
-﻿using System.Data;
-using LibraryManagement.Forms.SachRelated.QuanLyNhaXuatBan;
-using LibraryManagement.Forms.SachRelated.QuanLyTacGia;
-using LibraryManagement.Forms.SachRelated.QuanLyTheLoai;
+﻿using System;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Windows.Forms;
+using LibraryManagement.Forms.NhanVienRelated.QuanLyNhanVien;
 using Microsoft.Data.SqlClient;
+using LibraryManagement.Forms.SachRelated.LichSuCapNhatSach;
+using LibraryManagement.Forms.SachRelated.QuanLySach;
+using LibraryManagement.Forms.SachRelated.QuanLyTacGia;
+using LibraryManagement.Forms.SachRelated.QuanLyTheLoai; // this namespace (self)
 
 namespace LibraryManagement.Forms.SachRelated.QuanLySach
 {
     public partial class QuanLySachForm : Form
     {
-        private const string TableName    = "Sach";
-        private const string IdColumnName = "Sach_ID"; // adjust if your PK differs
-
-        // Hide technical columns + FK ids (we will show *_Name instead)
-        private static readonly string[] HiddenColumns =
-        {
-            "ID", "Sach_ID", "TinhTrangSach", "QR_Code",
-            "NXB_ID", "TG_ID", "TL_ID"
-        };
-
-        // Data
-        private readonly DataTable _books = new DataTable();
-        private readonly BindingSource _bs = new BindingSource();
-
-        // Resolved lookup meta (auto-detected once)
-        private string? _nxbTable, _nxbIdCol, _nxbNameCol;
-        private string? _tgTable,  _tgIdCol,  _tgNameCol;
-        private string? _tlTable,  _tlIdCol,  _tlNameCol;
+        private readonly DataTable _dt = new();
+        private readonly BindingSource _bs = new();
 
         public QuanLySachForm()
         {
             InitializeComponent();
 
-            Load += (_, __) => ReloadBooks();
+            // Bind grid
+            dgvSach.AutoGenerateColumns = false;
+            _bs.DataSource = _dt;
+            dgvSach.DataSource = _bs;
 
-            // Wiring (clear first to avoid duplicate handlers)
-            btnQuanLyNXB.Click       -= BtnQuanLyNXB_Click;
-            btnQuanLyTheLoai.Click   -= BtnQuanLyTheLoai_Click;
-            btnQuanLyTacGia.Click    -= BtnQuanLyTacGia_Click;
-            btnThemSach.Click        -= btnThemSach_Click;
-            btnTimKiem.Click         -= BtnTimKiem_Click;
-            btnXoaNhieu.Click        -= BtnXoaNhieu_Click;
+            // Events
+            Load += (_, __) => Reload();
+            btnTimKiem.Click += (_, __) => Reload(txtSearch.Text?.Trim());
+            txtSearch.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) Reload(txtSearch.Text?.Trim()); };
 
-            btnQuanLyNXB.Click       += BtnQuanLyNXB_Click;
-            btnQuanLyTheLoai.Click   += BtnQuanLyTheLoai_Click;
-            btnQuanLyTacGia.Click    += BtnQuanLyTacGia_Click;
-            btnThemSach.Click        += btnThemSach_Click;
-            btnTimKiem.Click         += BtnTimKiem_Click;
-            btnXoaNhieu.Click        += BtnXoaNhieu_Click;
+            btnThemSach.Click += (_, __) => OpenThemSach();
+            btnXoaNhieu.Click += (_, __) => BulkDelete();
+            btnLichSuCapNhat.Click += (_, __) => OpenLichSu();
 
-            btnXoaNhieu.Enabled = false;
+            btnQuanLyNXB.Click += (_, __) => OpenQuanLyNXB();
+            btnQuanLyTheLoai.Click += (_, __) => OpenQuanLyTheLoai();
+            btnQuanLyTacGia.Click += (_, __) => OpenQuanLyTacGia();
 
-            // Grid behavior
-            dgvBooks.AutoGenerateColumns = false;
-            dgvBooks.CellPainting += DgvBooks_CellPainting;       // draw Sửa/Xóa
-            dgvBooks.CellMouseClick += DgvBooks_CellMouseClick;   // handle clicks
-            dgvBooks.CurrentCellDirtyStateChanged += DgvBooks_CurrentCellDirtyStateChanged;
-            dgvBooks.CellValueChanged += DgvBooks_CellValueChanged;
-            dgvBooks.DataBindingComplete += (_, __) => UpdateSttValues();
-            dgvBooks.Sorted += (_, __) => UpdateSttValues();
-
-            _bs.DataSource = _books;
-            dgvBooks.DataSource = _bs;
-        }
-
-        // ===== Toolbar actions =====
-        private void BtnQuanLyNXB_Click(object? s, EventArgs e)
-        {
-            using (var f = new QuanLyNxbForm())
+            dgvSach.CurrentCellDirtyStateChanged += (_, __) =>
             {
-                Hide();
-                var result = f.ShowDialog(this);
-                Show();
-                if (result == DialogResult.OK)
-                    ReloadBooks(txtSearch.Text?.Trim());
-            }
-        }
-        private void BtnQuanLyTheLoai_Click(object? s, EventArgs e)
-        {
-            using (var f = new QuanLyTheLoaiForm())
+                if (dgvSach.IsCurrentCellDirty && dgvSach.CurrentCell is DataGridViewCheckBoxCell)
+                    dgvSach.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            };
+            dgvSach.CellValueChanged += (_, e) =>
             {
-                Hide();
-                var result = f.ShowDialog(this);
-                Show();
-                if (result == DialogResult.OK)
-                    ReloadBooks(txtSearch.Text?.Trim());
-            }
-        }
-        private void BtnQuanLyTacGia_Click(object? s, EventArgs e)
-        {
-            using (var f = new QuanLyTacGiaForm())
-            {
-                Hide();
-                var result = f.ShowDialog(this);
-                Show();
-                if (result == DialogResult.OK)
-                    ReloadBooks(txtSearch.Text?.Trim());
-            }
+                if (e.RowIndex >= 0 && dgvSach.Columns[e.ColumnIndex].Name == "Select")
+                    UpdateBulkDeleteButtonState();
+            };
+            dgvSach.DataBindingComplete += (_, __) => UpdateSttValues();
+            dgvSach.Sorted += (_, __) => UpdateSttValues();
+            dgvSach.CellPainting += DgvSach_CellPainting;
+            dgvSach.CellMouseClick += DgvSach_CellMouseClick;
         }
 
-        private void BtnTimKiem_Click(object? s, EventArgs e) => ReloadBooks(txtSearch.Text?.Trim());
-
-        private void btnThemSach_Click(object? sender, EventArgs e)
+        // ================== Data ==================
+        private void Reload(string? search = null)
         {
-            using (var f = new ThemSachForm())
-            {
-                if (f.ShowDialog(this) == DialogResult.OK)
-                    ReloadBooks(txtSearch.Text?.Trim());
-            }
-        }
-
-        private void BtnXoaNhieu_Click(object? s, EventArgs e) => BulkDeleteSelected();
-
-        // ===== Data loading (JOIN to show names) =====
-        private void ReloadBooks(string? search = null)
-        {
-            _books.Clear();
+            _dt.Clear();
 
             using var conn = Db.Create();
-            using var cmd  = conn.CreateCommand();
-            conn.Open();
-
-            if (_nxbTable == null && _tgTable == null && _tlTable == null)
-                ResolveLookups(conn);
-
-            bool withSearch = !string.IsNullOrWhiteSpace(search);
-            cmd.CommandText = BuildSelectSql(withSearch);
-            if (withSearch)
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+SELECT  s.Sach_ID,
+        s.TenSach,
+        s.NamXuatBan,
+        ISNULL(nxb.TenNXB, N'')      AS NhaXuatBan,
+        ISNULL(tg.TenTG,  N'')       AS TacGia,
+        ISNULL(tl.TenTheLoai, N'')   AS TheLoai
+FROM dbo.Sach s
+LEFT JOIN dbo.NhaXuatBan nxb ON nxb.NXB_ID = s.NXB_ID
+LEFT JOIN dbo.TacGia     tg  ON tg.TG_ID   = s.TG_ID
+LEFT JOIN dbo.TheLoai    tl  ON tl.TL_ID   = s.TL_ID
+/**where**/
+ORDER BY s.Sach_ID DESC;";
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                cmd.CommandText = cmd.CommandText.Replace("/**where**/",
+                    "WHERE s.TenSach LIKE N'%' + @q + N'%'");
                 cmd.Parameters.Add(new SqlParameter("@q", SqlDbType.NVarChar, 255) { Value = search! });
+            }
+            else cmd.CommandText = cmd.CommandText.Replace("/**where**/", "");
 
             using var da = new SqlDataAdapter(cmd);
-            da.Fill(_books);
+            da.Fill(_dt);
 
-            BuildGridColumnsIfNeeded(); // build once to keep widths stable
-            EnsureHiddenColumns();      // hide *_ID etc.
-            LocalizeHeaders();          // VN headers (incl. *_Name)
-            UpdateEmptyState();
+            BuildGridColumnsOnce();
+            lblEmpty.Visible = _dt.Rows.Count == 0;
             UpdateBulkDeleteButtonState();
             UpdateSttValues();
         }
 
-        private static (string table, string id, string name)? TryResolveLookup(
-            SqlConnection conn, string[] tableCandidates, string[] idCandidates, string[] nameCandidates)
+        // ================== Grid: fixed columns & widths ==================
+        private void BuildGridColumnsOnce()
         {
-            foreach (var t in tableCandidates)
-            {
-                try
-                {
-                    using var probe = new SqlCommand($"SELECT TOP(1) * FROM {t}", conn);
-                    using var da = new SqlDataAdapter(probe);
-                    var tmp = new DataTable();
-                    da.Fill(tmp);
-                    if (tmp.Columns.Count == 0) continue;
+            if (dgvSach.Columns.Count > 0) return;
 
-                    var id   = idCandidates.FirstOrDefault(c => tmp.Columns.Contains(c));
-                    var name = nameCandidates.FirstOrDefault(c => tmp.Columns.Contains(c));
-                    if (id != null && name != null) return (t, id, name);
-                }
-                catch { /* try next */ }
-            }
-            return null;
+            dgvSach.Columns.Clear();
+
+            // [0] Checkbox
+            dgvSach.Columns.Add(new DataGridViewCheckBoxColumn
+            {
+                Name = "Select", HeaderText = "Chọn",
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 7
+            });
+
+            // [1] STT
+            dgvSach.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "STT", HeaderText = "STT", ReadOnly = true,
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 7
+            });
+
+            // (Hidden) ID
+            dgvSach.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "Sach_ID", DataPropertyName = "Sach_ID",
+                Visible = false, ReadOnly = true
+            });
+
+            // [Tên sách]
+            dgvSach.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "TenSach", DataPropertyName = "TenSach",
+                HeaderText = "Tên sách", ReadOnly = true,
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 24
+            });
+
+            // [Năm xuất bản]
+            dgvSach.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "NamXuatBan", DataPropertyName = "NamXuatBan",
+                HeaderText = "Năm xuất bản", ReadOnly = true,
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 11
+            });
+
+            // [Nhà Xuất Bản]
+            dgvSach.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "NhaXuatBan", DataPropertyName = "NhaXuatBan",
+                HeaderText = "Nhà Xuất Bản", ReadOnly = true,
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 15
+            });
+
+            // [Tác Giả]
+            dgvSach.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "TacGia", DataPropertyName = "TacGia",
+                HeaderText = "Tác Giả", ReadOnly = true,
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 13
+            });
+
+            // [Thể Loại]
+            dgvSach.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "TheLoai", DataPropertyName = "TheLoai",
+                HeaderText = "Thể Loại", ReadOnly = true,
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 13
+            });
+
+            // [Chức năng] paint buttons Sửa/Xóa
+            dgvSach.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "Function", HeaderText = "Chức năng", ReadOnly = true,
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 10
+            });
         }
 
-        private void ResolveLookups(SqlConnection conn)
-        {
-            var nxb = TryResolveLookup(conn,
-                new[] { "NXB", "NhaXuatBan" },
-                new[] { "NXB_ID", "ID" },
-                new[] { "TenNXB", "Ten", "TenNhaXuatBan" });
-            if (nxb.HasValue) { _nxbTable = nxb.Value.table; _nxbIdCol = nxb.Value.id; _nxbNameCol = nxb.Value.name; }
-
-            var tg = TryResolveLookup(conn,
-                new[] { "TacGia" },
-                new[] { "TG_ID", "ID" },
-                new[] { "TenTG", "HoTen", "TenTacGia" });
-            if (tg.HasValue) { _tgTable = tg.Value.table; _tgIdCol = tg.Value.id; _tgNameCol = tg.Value.name; }
-
-            var tl = TryResolveLookup(conn,
-                new[] { "TheLoai" },
-                new[] { "TL_ID", "ID" },
-                new[] { "TenTL", "TenTheLoai", "Ten" });
-            if (tl.HasValue) { _tlTable = tl.Value.table; _tlIdCol = tl.Value.id; _tlNameCol = tl.Value.name; }
-        }
-
-        private string BuildSelectSql(bool withSearch)
-        {
-            // Stable alias columns for display: NXB_Name, TacGia_Name, TheLoai_Name
-            var select = $@"
-SELECT s.*,
-       {(_nxbTable != null ? $"n.[{_nxbNameCol}]  AS NXB_Name"     : "NULL AS NXB_Name")},
-       {(_tgTable  != null ? $"tg.[{_tgNameCol}]  AS TacGia_Name"  : "NULL AS TacGia_Name")},
-       {(_tlTable  != null ? $"tl.[{_tlNameCol}]  AS TheLoai_Name" : "NULL AS TheLoai_Name")}
-FROM {TableName} s
-{(_nxbTable != null ? $"LEFT JOIN {_nxbTable} n  ON s.NXB_ID = n.[{_nxbIdCol}] "   : "")}
-{(_tgTable  != null ? $"LEFT JOIN {_tgTable}  tg ON s.TG_ID  = tg.[{_tgIdCol}] "  : "")}
-{(_tlTable  != null ? $"LEFT JOIN {_tlTable}  tl ON s.TL_ID  = tl.[{_tlIdCol}] "  : "")}";
-            if (withSearch) select += "WHERE s.TenSach LIKE N'%' + @q + N'%' ";
-            return select;
-        }
-
-        // ===== Grid build / visuals =====
-        private void BuildGridColumnsIfNeeded()
-        {
-            if (dgvBooks.Columns.Count > 0) return;
-
-            // 1) Checkbox
-            var colSelect = new DataGridViewCheckBoxColumn
-            {
-                Name = "Select",
-                HeaderText = "Chọn",
-                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
-                FillWeight = 6
-            };
-            dgvBooks.Columns.Add(colSelect);
-
-            // 2) STT
-            var colStt = new DataGridViewTextBoxColumn
-            {
-                Name = "STT",
-                HeaderText = "STT",
-                ReadOnly = true,
-                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
-                FillWeight = 5
-            };
-            dgvBooks.Columns.Add(colStt);
-
-            // 3) DB columns (from DataTable; we’ll hide technical ones later)
-            foreach (DataColumn dc in _books.Columns)
-            {
-                string colName = dc.ColumnName;
-                var col = new DataGridViewTextBoxColumn
-                {
-                    DataPropertyName = colName,
-                    Name = colName,
-                    HeaderText = ToVietnameseHeader(colName),
-                    ReadOnly = true,
-                    AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
-                    FillWeight = 1
-                };
-                dgvBooks.Columns.Add(col);
-            }
-
-            // 4) Function column
-            var colFunc = new DataGridViewTextBoxColumn
-            {
-                Name = "Function",
-                HeaderText = "Chức năng",
-                ReadOnly = true,
-                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
-                FillWeight = 12
-            };
-            dgvBooks.Columns.Add(colFunc);
-        }
-
-        private void EnsureHiddenColumns()
-        {
-            foreach (var name in HiddenColumns)
-            {
-                var col = dgvBooks.Columns[name];
-                if (col != null) col.Visible = false;
-            }
-            var pk = dgvBooks.Columns[IdColumnName];
-            if (pk != null) pk.Visible = false;
-        }
-
-        private void LocalizeHeaders()
-        {
-            foreach (DataGridViewColumn c in dgvBooks.Columns)
-            {
-                if (c.Name is "Select" or "STT" or "Function") continue;
-                c.HeaderText = ToVietnameseHeader(c.Name);
-            }
-        }
-
-        // VN headers, including resolved *_Name columns
-        private static string ToVietnameseHeader(string col) => col.ToLowerInvariant() switch
-        {
-            "tensach"       => "Tên sách",
-            "namxuatban"    => "Năm xuất bản",
-            "tinhtrangsach" => "Tình trạng sách",
-
-            // FK ids (hidden) and display names
-            "nxb_id"        => "Nhà Xuất Bản",
-            "tg_id"         => "Tác Giả",
-            "tl_id"         => "Thể Loại",
-            "nxb_name"      => "Nhà Xuất Bản",
-            "tacgia_name"   => "Tác Giả",
-            "theloai_name"  => "Thể Loại",
-
-            "soluong"       => "Số lượng",
-            "gia"           => "Giá",
-            "mota"          => "Mô tả",
-            "ngaynhap"      => "Ngày nhập",
-            "vitri"         => "Vị trí",
-            "masach"        => "Mã sách",
-            _               => SplitPascal(col)
-        };
-
-        private static string SplitPascal(string s)
-        {
-            var chars = new System.Collections.Generic.List<char>(s.Length * 2);
-            for (int i = 0; i < s.Length; i++)
-            {
-                char c = s[i];
-                if (i > 0 && char.IsUpper(c) && (char.IsLower(s[i - 1]) || (i + 1 < s.Length && char.IsLower(s[i + 1]))))
-                    chars.Add(' ');
-                chars.Add(c);
-            }
-            return new string(chars.ToArray());
-        }
-
-        // ===== STT / empty state =====
         private void UpdateSttValues()
         {
-            var sttCol = dgvBooks.Columns["STT"];
-            if (sttCol == null) return;
+            var col = dgvSach.Columns["STT"];
+            if (col == null) return;
+            for (int i = 0; i < dgvSach.Rows.Count; i++)
+                if (!dgvSach.Rows[i].IsNewRow)
+                    dgvSach.Rows[i].Cells[col.Index].Value = (i + 1).ToString();
+        }
 
-            for (int i = 0; i < dgvBooks.Rows.Count; i++)
-            {
-                var row = dgvBooks.Rows[i];
-                if (!row.IsNewRow)
-                    row.Cells[sttCol.Index].Value = (i + 1).ToString();
-            }
-        }
-        private void UpdateEmptyState() => lblEmpty.Visible = _books.Rows.Count == 0;
-
-        // ===== Checkbox & bulk delete enable =====
-        private void DgvBooks_CurrentCellDirtyStateChanged(object? sender, EventArgs e)
-        {
-            if (dgvBooks.IsCurrentCellDirty && dgvBooks.CurrentCell is DataGridViewCheckBoxCell)
-                dgvBooks.CommitEdit(DataGridViewDataErrorContexts.Commit);
-        }
-        private void DgvBooks_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
-        {
-            if (e.RowIndex >= 0 && dgvBooks.Columns[e.ColumnIndex].Name == "Select")
-                UpdateBulkDeleteButtonState();
-        }
         private void UpdateBulkDeleteButtonState()
         {
-            var selectCol = dgvBooks.Columns["Select"];
-            if (selectCol == null) { btnXoaNhieu.Enabled = false; return; }
+            var selIdx = dgvSach.Columns["Select"]?.Index ?? -1;
+            if (selIdx < 0) { btnXoaNhieu.Enabled = false; return; }
 
-            bool anyChecked = dgvBooks.Rows
-                .Cast<DataGridViewRow>()
-                .Any(r => Convert.ToBoolean(r.Cells[selectCol.Index].Value ?? false));
-
-            btnXoaNhieu.Enabled = anyChecked;
+            bool any = dgvSach.Rows.Cast<DataGridViewRow>()
+                .Any(r => Convert.ToBoolean(r.Cells[selIdx].Value ?? false));
+            btnXoaNhieu.Enabled = any;
         }
 
-        // ===== Function buttons (Sửa/Xóa) =====
-        private void DgvBooks_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
+        // ================== Function column (Sửa/Xóa) ==================
+        private void DgvSach_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
         {
             if (e.RowIndex < 0) return;
-            if (dgvBooks.Columns[e.ColumnIndex].Name != "Function") return;
+            if (dgvSach.Columns[e.ColumnIndex].Name != "Function") return;
 
             e.PaintBackground(e.ClipBounds, true);
             var cell = e.CellBounds;
-            int padding = Math.Max(2, cell.Height / 10);
-            int btnWidth = (cell.Width - (padding * 3)) / 2;
-            int btnHeight = cell.Height - (padding * 2);
+            int pad = Math.Max(2, cell.Height / 10);
+            int btnW = (cell.Width - (pad * 3)) / 2;
+            int btnH = cell.Height - (pad * 2);
 
-            var editRect = new Rectangle(cell.X + padding, cell.Y + padding, btnWidth, btnHeight);
-            var delRect  = new Rectangle(editRect.Right + padding, cell.Y + padding, btnWidth, btnHeight);
+            var editR = new Rectangle(cell.X + pad, cell.Y + pad, btnW, btnH);
+            var delR = new Rectangle(editR.Right + pad, cell.Y + pad, btnW, btnH);
 
-            ButtonRenderer.DrawButton(e.Graphics, editRect, "Sửa", e.CellStyle.Font, false,
+            ButtonRenderer.DrawButton(e.Graphics, editR, "Sửa", e.CellStyle.Font, false,
                 System.Windows.Forms.VisualStyles.PushButtonState.Default);
-            ButtonRenderer.DrawButton(e.Graphics, delRect, "Xóa", e.CellStyle.Font, false,
+            ButtonRenderer.DrawButton(e.Graphics, delR, "Xóa", e.CellStyle.Font, false,
                 System.Windows.Forms.VisualStyles.PushButtonState.Default);
 
             e.Handled = true;
         }
 
-        private void DgvBooks_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
+        private void DgvSach_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
         {
             if (e.RowIndex < 0) return;
             if (e.Button != MouseButtons.Left) return;
-            if (dgvBooks.Columns[e.ColumnIndex].Name != "Function") return;
+            if (dgvSach.Columns[e.ColumnIndex].Name != "Function") return;
 
-            var cell = dgvBooks.GetCellDisplayRectangle(e.ColumnIndex, e.RowIndex, false);
-            int padding = Math.Max(2, cell.Height / 10);
-            int btnWidth = (cell.Width - (padding * 3)) / 2;
+            var cell = dgvSach.GetCellDisplayRectangle(e.ColumnIndex, e.RowIndex, false);
+            int pad = Math.Max(2, cell.Height / 10);
+            int w = (cell.Width - (pad * 3)) / 2;
 
-            var editRect = new Rectangle(cell.X + padding, cell.Y + padding, btnWidth, cell.Height - (padding * 2));
-            var delRect  = new Rectangle(editRect.Right + padding, cell.Y + padding, btnWidth, cell.Height - (padding * 2));
-            var click    = dgvBooks.PointToClient(Cursor.Position);
+            var editR = new Rectangle(cell.X + pad, cell.Y + pad, w, cell.Height - (pad * 2));
+            var delR = new Rectangle(editR.Right + pad, cell.Y + pad, w, cell.Height - (pad * 2));
+            var click = dgvSach.PointToClient(Cursor.Position);
 
-            if (editRect.Contains(click)) EditRow(e.RowIndex);
-            else if (delRect.Contains(click)) DeleteSingle(e.RowIndex);
+            if (editR.Contains(click)) EditRow(e.RowIndex);
+            else if (delR.Contains(click)) DeleteSingle(e.RowIndex);
         }
 
-        private void EditRow(int rowIndex)
-        {
-            var id = GetRowId(dgvBooks.Rows[rowIndex]);
-            if (id == null) { MessageBox.Show("Không tìm thấy ID bản ghi.", "Lỗi"); return; }
-
-            using (var f = new SuaSachForm(id.Value))
-            {
-                if (f.ShowDialog(this) == DialogResult.OK)
-                    ReloadBooks(txtSearch.Text?.Trim());
-            }
-        }
-
-        private void DeleteSingle(int rowIndex)
-        {
-            var id = GetRowId(dgvBooks.Rows[rowIndex]);
-            if (id == null) { MessageBox.Show("Không tìm thấy ID bản ghi.", "Lỗi"); return; }
-
-            var confirm = MessageBox.Show("Bạn có chắc muốn xóa bản ghi này?",
-                "Xóa sách", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-            if (confirm != DialogResult.Yes) return;
-
-            ExecuteDeleteByIds(new[] { id.Value });
-            ReloadBooks(txtSearch.Text?.Trim());
-        }
-
-        private void BulkDeleteSelected()
-        {
-            var selectCol = dgvBooks.Columns["Select"];
-            if (selectCol == null) return;
-
-            var ids = dgvBooks.Rows
-                .Cast<DataGridViewRow>()
-                .Where(r => Convert.ToBoolean(r.Cells[selectCol.Index].Value ?? false))
-                .Select(GetRowId)
-                .Where(v => v.HasValue)
-                .Select(v => v!.Value)
-                .ToArray();
-
-            if (ids.Length == 0) return;
-
-            var confirm = MessageBox.Show($"Xóa {ids.Length} sách đã chọn?",
-                "Xóa nhiều sách", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-            if (confirm != DialogResult.Yes) return;
-
-            ExecuteDeleteByIds(ids);
-            ReloadBooks(txtSearch.Text?.Trim());
-        }
-
+        // ================== Actions ==================
         private int? GetRowId(DataGridViewRow row)
         {
             try
             {
-                // Prefer bound value
+                object? v = null;
+
                 if (row.DataBoundItem is DataRowView drv)
-                {
-                    var obj = drv.Row[IdColumnName];
-                    if (obj != DBNull.Value && obj != null)
-                    {
-                        if (obj is int i) return i;
-                        if (obj is long l) return checked((int)l);
-                        if (int.TryParse(obj.ToString(), out var parsed)) return parsed;
-                    }
-                }
-                // Fallback: by cell
-                if (dgvBooks.Columns.Contains(IdColumnName))
-                {
-                    var val = row.Cells[IdColumnName].Value;
-                    if (val != null && val != DBNull.Value)
-                    {
-                        if (val is int i2) return i2;
-                        if (val is long l2) return checked((int)l2);
-                        if (int.TryParse(val.ToString(), out var parsed2)) return parsed2;
-                    }
-                }
-                if (dgvBooks.Columns.Contains("ID"))
-                {
-                    var val = row.Cells["ID"].Value;
-                    if (val != null && int.TryParse(val.ToString(), out var parsed3)) return parsed3;
-                }
+                    v = drv.Row["Sach_ID"];
+                else
+                    v = row.Cells["Sach_ID"].Value;
+
+                if (v == null || v == DBNull.Value) return null;
+                if (v is int i) return i;
+                if (v is long l) return checked((int)l);
+                if (int.TryParse(v.ToString(), out var p)) return p;
             }
-            catch { /* ignore */ }
+            catch { }
             return null;
         }
 
-        private void ExecuteDeleteByIds(int[] ids)
+        private void OpenThemSach()
+        {
+            using var f = new ThemSachForm();
+            if (f.ShowDialog(this) == DialogResult.OK)
+                Reload(txtSearch.Text?.Trim());
+        }
+
+        private void EditRow(int rowIndex)
+        {
+            var id = GetRowId(dgvSach.Rows[rowIndex]);
+            if (id == null) { MessageBox.Show("Không tìm thấy ID.", "Lỗi"); return; }
+
+            using var f = new SuaSachForm(id.Value);
+            if (f.ShowDialog(this) == DialogResult.OK)
+                Reload(txtSearch.Text?.Trim());
+        }
+
+        private void DeleteSingle(int rowIndex)
+        {
+            var id = GetRowId(dgvSach.Rows[rowIndex]);
+            if (id == null) { MessageBox.Show("Không tìm thấy ID.", "Lỗi"); return; }
+
+            if (MessageBox.Show("Bạn có chắc muốn xóa sách này?", "Xóa sách",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+
+            using var conn = Db.Create();
+            using var cmdDel = conn.CreateCommand();
+            cmdDel.CommandText = "DELETE FROM dbo.Sach WHERE Sach_ID=@id";
+            cmdDel.Parameters.Add(new SqlParameter("@id", SqlDbType.Int){ Value = id.Value });
+            conn.Open();
+            cmdDel.ExecuteNonQuery();
+
+            // No logging here (disabled by request)
+            Reload(txtSearch.Text?.Trim());
+        }
+
+        private void BulkDelete()
+        {
+            var selIdx = dgvSach.Columns["Select"]?.Index ?? -1;
+            if (selIdx < 0) return;
+
+            var ids = dgvSach.Rows.Cast<DataGridViewRow>()
+                .Where(r => Convert.ToBoolean(r.Cells[selIdx].Value ?? false))
+                .Select(GetRowId).Where(i => i.HasValue).Select(i => i!.Value).ToArray();
+
+            if (ids.Length == 0) return;
+
+            if (MessageBox.Show($"Xóa {ids.Length} sách đã chọn?", "Xóa nhiều",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+
+            ExecuteDelete(ids);
+            Reload(txtSearch.Text?.Trim());
+        }
+
+        private void ExecuteDelete(int[] ids)
         {
             using var conn = Db.Create();
             conn.Open();
 
-            var parms = ids.Select((_, i) => $"@p{i}").ToArray();
-            var sql = $"DELETE FROM {TableName} WHERE {IdColumnName} IN ({string.Join(",", parms)})";
+            foreach (var id in ids)
+            {
+                using var del = conn.CreateCommand();
+                del.CommandText = "DELETE FROM dbo.Sach WHERE Sach_ID=@id";
+                del.Parameters.Add(new SqlParameter("@id", SqlDbType.Int){ Value = id });
+                del.ExecuteNonQuery();
 
-            using var cmd = new SqlCommand(sql, conn);
-            for (int i = 0; i < ids.Length; i++)
-                cmd.Parameters.Add(new SqlParameter(parms[i], SqlDbType.Int) { Value = ids[i] });
+                // No logging here (disabled by request)
+            }
+        }
 
-            cmd.ExecuteNonQuery();
+        private void OpenLichSu()
+        {
+            using var f = new LichSuCapNhatSachForm();
+            var me = this;
+            me.Hide();
+            try { _ = f.ShowDialog(me); }
+            finally { me.Show(); me.Activate(); }
+        }
+
+        // === Navigations (adjust namespaces if needed) ===
+        private void OpenQuanLyNXB()
+        {
+            try
+            {
+                using var f = new QuanLyNhanVienForm();
+                Hide(); _ = f.ShowDialog(this); Show(); Activate();
+            }
+            catch
+            {
+                MessageBox.Show("Không tìm thấy form Quản lý NXB. Hãy kiểm tra namespace/tên lớp.", "Thông báo");
+            }
+        }
+
+        private void OpenQuanLyTheLoai()
+        {
+            try
+            {
+                using var f = new QuanLyTheLoaiForm();
+                Hide(); _ = f.ShowDialog(this); Show(); Activate();
+            }
+            catch
+            {
+                MessageBox.Show("Không tìm thấy form Quản lý thể loại. Hãy kiểm tra namespace/tên lớp.", "Thông báo");
+            }
+        }
+
+        private void OpenQuanLyTacGia()
+        {
+            try
+            {
+                using var f = new QuanLyTacGiaForm();
+                Hide(); _ = f.ShowDialog(this); Show(); Activate();
+            }
+            catch
+            {
+                MessageBox.Show("Không tìm thấy form Quản lý tác giả. Hãy kiểm tra namespace/tên lớp.", "Thông báo");
+            }
         }
     }
 }

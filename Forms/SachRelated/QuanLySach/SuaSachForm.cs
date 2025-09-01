@@ -1,16 +1,24 @@
-﻿using System.Data;
+﻿using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Drawing;
+using System.Windows.Forms;
+using LibraryManagement.Forms.Operations;
 using Microsoft.Data.SqlClient;
 
 namespace LibraryManagement.Forms.SachRelated.QuanLySach
 {
     public partial class SuaSachForm : Form
     {
-        private const string TableName    = "Sach";
+        private const string TableName = "Sach";
         private const string IdColumnName = "Sach_ID"; // adjust if your PK differs
+
+        // Only TenSach is required (UI-level)
+        private static readonly HashSet<string> RequiredOnly = new(StringComparer.OrdinalIgnoreCase) { "TenSach" };
 
         // Exclude from editable UI
         private static readonly HashSet<string> ExcludedColumns =
-            new(StringComparer.OrdinalIgnoreCase) { "QR_Code" };
+            new(StringComparer.OrdinalIgnoreCase) { "Sach_ID", "ID", "QR_Code" };
 
         private sealed class ColumnMeta
         {
@@ -18,20 +26,25 @@ namespace LibraryManagement.Forms.SachRelated.QuanLySach
             public string DataType = "";
             public int MaxLength;
             public bool IsNullable;
-            public bool IsIdentity;
-            public bool IsComputed;
             public int Ordinal;
         }
 
-        private readonly int _id;
+        private readonly int _sachId;
         private readonly List<ColumnMeta> _cols = new();
-        private readonly Dictionary<string, Control> _controlsByColumn = new(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<string> _requiredColumns = new(StringComparer.OrdinalIgnoreCase);
-        private DataRow? _row;
+        private readonly Dictionary<string, Control> _controls = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, ComboBox> _lookupCombos = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["NXB_ID"] = null!,
+            ["TG_ID"]  = null!,
+            ["TL_ID"]  = null!
+        };
+
+        private DataRow? _rowBefore;
 
         public SuaSachForm(int sachId)
         {
-            _id = sachId;
+            _sachId = sachId;
+
             InitializeComponent();
 
             StartPosition = FormStartPosition.CenterParent;
@@ -63,19 +76,13 @@ namespace LibraryManagement.Forms.SachRelated.QuanLySach
             btnCancel.Click += (_, __) => DialogResult = DialogResult.Cancel;
         }
 
-        // ---------- Schema & data ----------
+        // ===== Schema =====
         private void LoadSchema()
         {
             using var conn = Db.Create();
             using var cmd  = conn.CreateCommand();
             cmd.CommandText = @"
-SELECT  c.name          AS ColumnName,
-        t.name          AS DataType,
-        c.max_length    AS MaxLength,
-        c.is_nullable   AS IsNullable,
-        c.is_identity   AS IsIdentity,
-        c.column_id     AS Ordinal,
-        c.is_computed   AS IsComputed
+SELECT  c.name, t.name, c.max_length, c.is_nullable, c.column_id
 FROM sys.columns c
 JOIN sys.types   t ON c.user_type_id = t.user_type_id
 WHERE c.object_id = OBJECT_ID(N'dbo." + TableName + @"')
@@ -84,290 +91,311 @@ ORDER BY c.column_id;";
             using var rd = cmd.ExecuteReader();
 
             _cols.Clear();
-            _requiredColumns.Clear();
-
             while (rd.Read())
             {
-                var meta = new ColumnMeta
+                var m = new ColumnMeta
                 {
                     Name       = rd.GetString(0),
                     DataType   = rd.GetString(1),
                     MaxLength  = rd.GetInt16(2),
                     IsNullable = rd.GetBoolean(3),
-                    IsIdentity = rd.GetBoolean(4),
-                    Ordinal    = rd.GetInt32(5),
-                    IsComputed = rd.GetBoolean(6)
+                    Ordinal    = rd.GetInt32(4)
                 };
-
-                if (meta.IsComputed || ExcludedColumns.Contains(meta.Name))
-                    continue;
-
-                // Don’t show the identity PK as an editable field
-                if (meta.IsIdentity && meta.Name.Equals(IdColumnName, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                _cols.Add(meta);
-                if (!meta.IsNullable)
-                    _requiredColumns.Add(meta.Name);
+                if (ExcludedColumns.Contains(m.Name)) continue;
+                _cols.Add(m);
             }
         }
 
+        // ===== Load existing row =====
         private void LoadExistingRow()
         {
             using var conn = Db.Create();
-            using var cmd  = conn.CreateCommand();
-            cmd.CommandText = $"SELECT TOP 1 * FROM {TableName} WHERE {IdColumnName} = @id";
-            cmd.Parameters.Add(new SqlParameter("@id", SqlDbType.Int) { Value = _id });
-
-            using var da = new SqlDataAdapter(cmd);
+            using var da = new SqlDataAdapter($"SELECT TOP(1) * FROM dbo.{TableName} WHERE {IdColumnName}=@id", conn);
+            da.SelectCommand.Parameters.Add(new SqlParameter("@id", SqlDbType.Int) { Value = _sachId });
             var dt = new DataTable();
             da.Fill(dt);
             if (dt.Rows.Count == 0)
-                throw new Exception($"Không tìm thấy bản ghi với {IdColumnName} = {_id}.");
+                throw new Exception("Không tìm thấy sách.");
 
-            _row = dt.Rows[0];
+            _rowBefore = dt.Rows[0];
         }
 
-        // ---------- UI build ----------
+        // ===== UI build =====
         private void BuildDynamicFields()
         {
-            grid.RowStyles.Clear();
             grid.Controls.Clear();
+            grid.RowStyles.Clear();
             grid.RowCount = 0;
-            _controlsByColumn.Clear();
+            _controls.Clear();
 
             foreach (var col in _cols)
             {
                 grid.RowCount += 1;
-                grid.RowStyles.Add(new RowStyle(SizeType.Percent, 1f)); // equal % height
+                grid.RowStyles.Add(new RowStyle(SizeType.Percent, 1f));
 
-                // Left cell: label + red *
-                var labelPanel = new FlowLayoutPanel
+                bool isLong   = IsLongText(col);
+                bool isDate   = IsDateType(col.DataType);
+                bool isBool   = IsBoolType(col.DataType);
+                bool isLookup = IsLookup(col.Name);
+
+                // label + star (star only for TenSach)
+                var pnl = new FlowLayoutPanel
                 {
-                    Dock = DockStyle.Fill,
-                    FlowDirection = FlowDirection.LeftToRight,
+                    Dock = DockStyle.Top,
                     WrapContents = false,
                     AutoSize = false,
-                    Padding = new Padding(6, 4, 0, 0),
+                    Height = 28,
+                    Padding = new Padding(6, 0, 0, 0),
                     Margin = new Padding(0)
                 };
-
-                var lbl = new Label
-                {
-                    AutoSize = true,
-                    Text = ToVietnameseLabel(col.Name),
-                    TextAlign = ContentAlignment.MiddleLeft,
-                    Margin = new Padding(0, 4, 2, 0)
-                };
+                var lbl = new Label { AutoSize = true, Text = ToVN(col.Name) };
                 var star = new Label
                 {
                     AutoSize = true,
-                    Text = _requiredColumns.Contains(col.Name) ? "*" : "",
+                    Text = RequiredOnly.Contains(col.Name) ? "*" : "",
                     ForeColor = Color.Firebrick,
-                    Font = new Font("Segoe UI", 10F, FontStyle.Bold),
-                    Margin = new Padding(0, 4, 0, 0)
+                    Font = new Font("Segoe UI", 10F, FontStyle.Bold)
                 };
+                int top = ComputeTopAlign(lbl, 28);
+                lbl.Margin  = new Padding(0, top, 2, 0);
+                star.Margin = new Padding(0, top, 0, 0);
+                pnl.Controls.Add(lbl);
+                pnl.Controls.Add(star);
+                grid.Controls.Add(pnl, 0, grid.RowCount - 1);
 
-                labelPanel.Controls.Add(lbl);
-                labelPanel.Controls.Add(star);
-                grid.Controls.Add(labelPanel, 0, grid.RowCount - 1);
-
-                // Right cell: input
+                // input control
                 Control input;
-                if (IsLookupColumn(col.Name))
+                if (isLookup)
                 {
-                    input = new ComboBox
+                    var cb = new ComboBox
                     {
-                        Dock = DockStyle.Fill,
+                        Dock = DockStyle.Top,
                         DropDownStyle = ComboBoxStyle.DropDownList,
-                        AutoCompleteMode = AutoCompleteMode.None,
-                        AutoCompleteSource = AutoCompleteSource.ListItems,
                         Margin = new Padding(0, 0, 0, 12)
                     };
+                    _lookupCombos[col.Name] = cb;
+                    input = cb;
                 }
-                else if (IsDateType(col.DataType))
+                else if (isDate)
                 {
                     input = new DateTimePicker
                     {
-                        Dock = DockStyle.Fill,
+                        Dock = DockStyle.Top,
                         Format = DateTimePickerFormat.Short,
                         Margin = new Padding(0, 0, 0, 12)
+                    };
+                }
+                else if (isBool)
+                {
+                    input = new CheckBox
+                    {
+                        Text = "Bật",
+                        AutoSize = true,
+                        Dock = DockStyle.Top,
+                        Margin = new Padding(0, 4, 0, 12)
                     };
                 }
                 else
                 {
                     var tb = new TextBox
                     {
-                        Dock = DockStyle.Fill,
                         AutoSize = false,
+                        Dock = DockStyle.Top,
+                        Height = isLong ? 96 : 28,
+                        Multiline = isLong,
+                        ScrollBars = isLong ? ScrollBars.Vertical : ScrollBars.None,
                         Margin = new Padding(0, 0, 0, 12)
                     };
-                    if (IsMultiline(col))
-                    {
-                        tb.Multiline = true;
-                        tb.ScrollBars = ScrollBars.Vertical;
-                        tb.Height = 80;
-                    }
-                    else
-                    {
-                        tb.Multiline = false;
-                        tb.Height = 32;
-                    }
                     input = tb;
                 }
 
-                _controlsByColumn[col.Name] = input;
+                _controls[col.Name] = input;
                 grid.Controls.Add(input, 1, grid.RowCount - 1);
             }
         }
 
-        private void LoadLookups()
+        private static bool IsLookup(string name) =>
+            name.Equals("NXB_ID", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("TG_ID",  StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("TL_ID",  StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsLongText(ColumnMeta c)
         {
-            TryBindLookup("NXB_ID", new[] { "NXB", "NhaXuatBan" }, new[] { "NXB_ID", "ID" }, new[] { "TenNXB", "Ten", "TenNhaXuatBan" });
-            TryBindLookup("TG_ID",  new[] { "TacGia" },            new[] { "TG_ID", "ID" },      new[] { "TenTG", "HoTen", "TenTacGia" });
-            TryBindLookup("TL_ID",  new[] { "TheLoai" },           new[] { "TL_ID", "ID" },      new[] { "TenTL", "TenTheLoai", "Ten" });
+            var t = c.DataType.ToLowerInvariant();
+            if (t is "text" or "ntext") return true;
+            if (t is "nvarchar" or "varchar") return c.MaxLength < 0 || c.MaxLength >= 400;
+            return false;
+        }
+        private static bool IsDateType(string dt) =>
+            dt.Equals("date", StringComparison.OrdinalIgnoreCase) ||
+            dt.Equals("datetime", StringComparison.OrdinalIgnoreCase) ||
+            dt.Equals("datetime2", StringComparison.OrdinalIgnoreCase) ||
+            dt.Equals("smalldatetime", StringComparison.OrdinalIgnoreCase);
+        private static bool IsBoolType(string dt) => dt.Equals("bit", StringComparison.OrdinalIgnoreCase);
+        private static int ComputeTopAlign(Label lbl, int targetHeight)
+        {
+            var h = TextRenderer.MeasureText("Ag", lbl.Font).Height;
+            return Math.Max(0, (targetHeight - h) / 2 - 1);
         }
 
-        private void TryBindLookup(string columnName, string[] tableCandidates, string[] idCandidates, string[] nameCandidates)
+        // ===== Lookups + bind =====
+        private void LoadLookups()
         {
-            if (!_controlsByColumn.TryGetValue(columnName, out var ctrl) || ctrl is not ComboBox cb)
-                return;
-
             using var conn = Db.Create();
             conn.Open();
 
-            foreach (var table in tableCandidates)
-            foreach (var id in idCandidates)
-            foreach (var name in nameCandidates)
+            if (_lookupCombos.TryGetValue("NXB_ID", out var cboNXB) && cboNXB != null)
             {
-                try
-                {
-                    using var cmd = new SqlCommand($"SELECT {id}, {name} FROM {table} ORDER BY {name}", conn);
-                    using var da  = new SqlDataAdapter(cmd);
-                    var dt = new DataTable();
-                    da.Fill(dt);
-                    if (dt.Rows.Count == 0) continue;
-
-                    cb.DisplayMember = name;
-                    cb.ValueMember   = id;
-                    cb.DataSource    = dt;
-
-                    cb.DropDownStyle      = ComboBoxStyle.DropDownList;
-                    cb.AutoCompleteMode   = AutoCompleteMode.None;
-                    cb.AutoCompleteSource = AutoCompleteSource.ListItems;
-                    return;
-                }
-                catch { /* try next */ }
+                var dt = new DataTable();
+                using var da = new SqlDataAdapter("SELECT NXB_ID, TenNXB FROM dbo.NhaXuatBan ORDER BY TenNXB", conn);
+                da.Fill(dt);
+                cboNXB.DisplayMember = "TenNXB";
+                cboNXB.ValueMember   = "NXB_ID";
+                cboNXB.DataSource    = dt;
             }
-
-            // Fallback: allow typing if we couldn't bind
-            cb.DataSource = null;
-            cb.Items.Clear();
-            cb.DropDownStyle      = ComboBoxStyle.DropDown;
-            cb.AutoCompleteMode   = AutoCompleteMode.None;
-            cb.AutoCompleteSource = AutoCompleteSource.None;
+            if (_lookupCombos.TryGetValue("TG_ID", out var cboTG) && cboTG != null)
+            {
+                var dt = new DataTable();
+                using var da = new SqlDataAdapter("SELECT TG_ID, TenTG FROM dbo.TacGia ORDER BY TenTG", conn);
+                da.Fill(dt);
+                cboTG.DisplayMember = "TenTG";
+                cboTG.ValueMember   = "TG_ID";
+                cboTG.DataSource    = dt;
+            }
+            if (_lookupCombos.TryGetValue("TL_ID", out var cboTL) && cboTL != null)
+            {
+                var dt = new DataTable();
+                using var da = new SqlDataAdapter("SELECT TL_ID, TenTheLoai FROM dbo.TheLoai ORDER BY TenTheLoai", conn);
+                da.Fill(dt);
+                cboTL.DisplayMember = "TenTheLoai";
+                cboTL.ValueMember   = "TL_ID";
+                cboTL.DataSource    = dt;
+            }
         }
 
         private void BindRowToControls()
         {
-            if (_row == null) return;
+            if (_rowBefore == null) return;
 
             foreach (var col in _cols)
             {
-                if (!_controlsByColumn.TryGetValue(col.Name, out var c)) continue;
+                if (!_controls.TryGetValue(col.Name, out var ctl)) continue;
 
-                object? value = _row[col.Name];
-                if (value is DBNull) value = null;
+                object v = _rowBefore[col.Name];
 
-                if (c is ComboBox cb)
+                switch (ctl)
                 {
-                    if (cb.DataSource != null)
-                    {
-                        try { cb.SelectedValue = value; } catch { cb.SelectedItem = null; }
-                        if (cb.SelectedItem == null && value != null) cb.Text = value.ToString();
-                    }
-                    else
-                    {
-                        cb.Text = value?.ToString() ?? "";
-                    }
-                }
-                else if (c is DateTimePicker dtp)
-                {
-                    if (value is DateTime dt) dtp.Value = dt;
-                }
-                else if (c is TextBox tb)
-                {
-                    tb.Text = value?.ToString() ?? "";
+                    case ComboBox cb:
+                        try { cb.SelectedValue = v == DBNull.Value ? null : v; } catch { /* ignore */ }
+                        break;
+                    case DateTimePicker dtp:
+                        dtp.Value = v == DBNull.Value ? DateTime.Today : Convert.ToDateTime(v);
+                        break;
+                    case CheckBox chk:
+                        chk.Checked = v != DBNull.Value && Convert.ToBoolean(v);
+                        break;
+                    case TextBox tb:
+                        tb.Text = v == DBNull.Value ? "" : v.ToString();
+                        break;
                 }
             }
         }
 
-        // ---------- Validation & save ----------
+        // ===== Validation =====
         private void WireValidation()
         {
-            foreach (var (name, control) in _controlsByColumn)
+            foreach (var (_, ctl) in _controls)
             {
-                if (control is TextBox tb)
-                    tb.TextChanged += (_, __) => UpdateSaveEnabled();
-                else if (control is ComboBox cb)
+                switch (ctl)
                 {
-                    cb.SelectedIndexChanged += (_, __) => UpdateSaveEnabled();
-                    cb.TextChanged          += (_, __) => UpdateSaveEnabled();
+                    case TextBox tb:
+                        tb.TextChanged += (_, __) => UpdateSaveEnabled();
+                        break;
+                    case ComboBox cb:
+                        cb.SelectedIndexChanged += (_, __) => UpdateSaveEnabled();
+                        break;
+                    case DateTimePicker dtp:
+                        dtp.ValueChanged += (_, __) => UpdateSaveEnabled();
+                        break;
                 }
-                else if (control is DateTimePicker dtp)
-                    dtp.ValueChanged += (_, __) => UpdateSaveEnabled();
             }
         }
 
         private void UpdateSaveEnabled()
         {
-            bool allOk = true;
-
-            foreach (var req in _requiredColumns)
+            // Only TenSach is required
+            if (!_controls.TryGetValue("TenSach", out var ctl) || ctl is not TextBox tb)
             {
-                if (!_controlsByColumn.TryGetValue(req, out var c)) continue;
-
-                if (c is TextBox tb)
-                    allOk &= !string.IsNullOrWhiteSpace(tb.Text);
-                else if (c is ComboBox cb)
-                {
-                    allOk &= cb.DropDownStyle == ComboBoxStyle.DropDownList
-                        ? cb.SelectedItem != null
-                        : !string.IsNullOrWhiteSpace(cb.Text);
-                }
-                else if (c is DateTimePicker)
-                    allOk &= true;
-
-                if (!allOk) break;
+                btnSave.Enabled = true; // if TenSach field is missing for any reason
+                return;
             }
 
-            btnSave.Enabled = allOk;
+            btnSave.Enabled = !string.IsNullOrWhiteSpace(tb.Text);
         }
 
+        // ===== Update + (optional) history =====
         private void DoUpdate()
         {
             try
             {
+                // Enforce only TenSach
+                if (!_controls.TryGetValue("TenSach", out var tenCtl) ||
+                    tenCtl is not TextBox tenTb ||
+                    string.IsNullOrWhiteSpace(tenTb.Text))
+                {
+                    MessageBox.Show("Vui lòng nhập: Tên sách", "Thiếu dữ liệu");
+                    return;
+                }
+
+                using var conn = Db.Create();
+                conn.Open();
+
+                // Re-read BEFORE snapshot to diff latest
+                var before = new DataTable();
+                using (var da = new SqlDataAdapter($"SELECT TOP(1) * FROM dbo.{TableName} WHERE {IdColumnName}=@id", conn))
+                {
+                    da.SelectCommand.Parameters.Add(new SqlParameter("@id", SqlDbType.Int) { Value = _sachId });
+                    da.Fill(before);
+                }
+                if (before.Rows.Count == 0)
+                {
+                    MessageBox.Show("Không tìm thấy sách.", "Lỗi");
+                    return;
+                }
+
                 var sets = new List<string>();
                 var prms = new List<SqlParameter>();
 
                 foreach (var col in _cols)
                 {
-                    if (!_controlsByColumn.TryGetValue(col.Name, out var c)) continue;
+                    if (!_controls.TryGetValue(col.Name, out var ctl)) continue;
 
-                    object? value = GetValueFor(col, c, out var dbType);
-                    if (value is null || (value is string s && string.IsNullOrWhiteSpace(s)))
+                    object? value = ctl switch
                     {
-                        if (col.IsNullable) value = DBNull.Value;
-                        else
+                        ComboBox cb      => cb.SelectedValue,
+                        DateTimePicker d => d.Value,
+                        CheckBox chk     => chk.Checked,
+                        TextBox tb       => (object?)tb.Text?.Trim(),
+                        _                => null
+                    };
+
+                    // Only TenSach is required; others become NULL when empty
+                    if (col.Name.Equals("TenSach", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (value is string s0 && string.IsNullOrWhiteSpace(s0))
                         {
-                            MessageBox.Show($"Vui lòng nhập: {ToVietnameseLabel(col.Name)}", "Thiếu dữ liệu");
+                            MessageBox.Show("Vui lòng nhập: Tên sách", "Thiếu dữ liệu");
                             return;
                         }
                     }
+                    else
+                    {
+                        if (value is string s && string.IsNullOrWhiteSpace(s))
+                            value = DBNull.Value;
+                    }
 
-                    sets.Add($"{col.Name} = @{col.Name}");
-                    prms.Add(new SqlParameter("@" + col.Name, dbType) { Value = value ?? DBNull.Value });
+                    sets.Add($"{col.Name}=@{col.Name}");
+                    prms.Add(new SqlParameter("@" + col.Name, MapSqlType(col)) { Value = value ?? DBNull.Value });
                 }
 
                 if (sets.Count == 0)
@@ -376,135 +404,80 @@ ORDER BY c.column_id;";
                     return;
                 }
 
-                var sql = $"UPDATE {TableName} SET {string.Join(", ", sets)} WHERE {IdColumnName} = @id";
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = $"UPDATE dbo.{TableName} SET {string.Join(",", sets)} WHERE {IdColumnName}=@id;";
+                    cmd.Parameters.AddRange(prms.ToArray());
+                    cmd.Parameters.Add(new SqlParameter("@id", SqlDbType.Int) { Value = _sachId });
+                    cmd.ExecuteNonQuery();
+                }
 
-                using var conn = Db.Create();
-                using var cmd  = new SqlCommand(sql, conn);
-                cmd.Parameters.AddRange(prms.ToArray());
-                cmd.Parameters.Add(new SqlParameter("@id", SqlDbType.Int) { Value = _id });
+                // AFTER for history
+                var after = new DataTable();
+                using (var da = new SqlDataAdapter($"SELECT TOP(1) * FROM dbo.{TableName} WHERE {IdColumnName}=@id", conn))
+                {
+                    da.SelectCommand.Parameters.Add(new SqlParameter("@id", SqlDbType.Int) { Value = _sachId });
+                    da.Fill(after);
+                }
 
-                conn.Open();
-                cmd.ExecuteNonQuery();
+                // History logging (kept as-is unless you want it disabled here too)
+                string detail = BuildDiff(before.Rows[0], after.Rows[0]);
+                if (string.IsNullOrWhiteSpace(detail))
+                    detail = $"Cập nhật sách ID={_sachId}";
+                InsertHistory(conn, _sachId, "Update", detail);
 
                 DialogResult = DialogResult.OK;
                 Close();
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Không thể lưu thay đổi: " + ex.Message, "Lỗi",
+                MessageBox.Show("Không thể lưu cập nhật: " + ex.Message, "Lỗi",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
-        private object? GetValueFor(ColumnMeta col, Control c, out SqlDbType dbType)
+        private static SqlDbType MapSqlType(ColumnMeta c)
         {
-            dbType = MapSqlDbType(col.DataType);
-
-            if (c is ComboBox cb)
-                return cb.SelectedValue ?? (object?)cb.Text;
-
-            if (c is DateTimePicker dtp)
-                return dtp.Value;
-
-            var txt = (c as TextBox)?.Text?.Trim();
-            if (string.IsNullOrWhiteSpace(txt)) return null;
-
-            if (IsNumeric(col.DataType))
+            var t = c.DataType.ToLowerInvariant();
+            return t switch
             {
-                if (col.DataType.Equals("int", StringComparison.OrdinalIgnoreCase) ||
-                    col.DataType.Equals("bigint", StringComparison.OrdinalIgnoreCase) ||
-                    col.DataType.Equals("smallint", StringComparison.OrdinalIgnoreCase) ||
-                    col.DataType.Equals("tinyint", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (long.TryParse(txt, out var l)) return l;
-                    throw new Exception($"Giá trị không hợp lệ cho {ToVietnameseLabel(col.Name)}");
-                }
-
-                if (col.DataType.Equals("float", StringComparison.OrdinalIgnoreCase) ||
-                    col.DataType.Equals("real", StringComparison.OrdinalIgnoreCase) ||
-                    col.DataType.Equals("decimal", StringComparison.OrdinalIgnoreCase) ||
-                    col.DataType.Equals("numeric", StringComparison.OrdinalIgnoreCase) ||
-                    col.DataType.Equals("money", StringComparison.OrdinalIgnoreCase) ||
-                    col.DataType.Equals("smallmoney", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (decimal.TryParse(txt, out var d)) return d;
-                    throw new Exception($"Giá trị không hợp lệ cho {ToVietnameseLabel(col.Name)}");
-                }
-            }
-
-            return txt; // default
+                "int" => SqlDbType.Int,
+                "bigint" => SqlDbType.BigInt,
+                "smallint" => SqlDbType.SmallInt,
+                "tinyint" => SqlDbType.TinyInt,
+                "bit" => SqlDbType.Bit,
+                "decimal" or "numeric" => SqlDbType.Decimal,
+                "money" => SqlDbType.Money,
+                "smallmoney" => SqlDbType.SmallMoney,
+                "float" => SqlDbType.Float,
+                "real" => SqlDbType.Real,
+                "date" => SqlDbType.Date,
+                "datetime" => SqlDbType.DateTime,
+                "datetime2" => SqlDbType.DateTime2,
+                "smalldatetime" => SqlDbType.SmallDateTime,
+                "time" => SqlDbType.Time,
+                "char" => SqlDbType.Char,
+                "nchar" => SqlDbType.NChar,
+                "varchar" => SqlDbType.VarChar,
+                "nvarchar" => SqlDbType.NVarChar,
+                "text" => SqlDbType.Text,
+                "ntext" => SqlDbType.NText,
+                "uniqueidentifier" => SqlDbType.UniqueIdentifier,
+                "binary" => SqlDbType.Binary,
+                "varbinary" => SqlDbType.VarBinary,
+                _ => SqlDbType.NVarChar
+            };
         }
 
-        private static SqlDbType MapSqlDbType(string typeName) => typeName.ToLowerInvariant() switch
-        {
-            "int" => SqlDbType.Int,
-            "bigint" => SqlDbType.BigInt,
-            "smallint" => SqlDbType.SmallInt,
-            "tinyint" => SqlDbType.TinyInt,
-            "bit" => SqlDbType.Bit,
-            "decimal" or "numeric" => SqlDbType.Decimal,
-            "money" => SqlDbType.Money,
-            "smallmoney" => SqlDbType.SmallMoney,
-            "float" => SqlDbType.Float,
-            "real" => SqlDbType.Real,
-            "date" => SqlDbType.Date,
-            "datetime" => SqlDbType.DateTime,
-            "datetime2" => SqlDbType.DateTime2,
-            "smalldatetime" => SqlDbType.SmallDateTime,
-            "time" => SqlDbType.Time,
-            "char" => SqlDbType.Char,
-            "nchar" => SqlDbType.NChar,
-            "varchar" => SqlDbType.VarChar,
-            "nvarchar" => SqlDbType.NVarChar,
-            "text" => SqlDbType.Text,
-            "ntext" => SqlDbType.NText,
-            "uniqueidentifier" => SqlDbType.UniqueIdentifier,
-            "binary" => SqlDbType.Binary,
-            "varbinary" => SqlDbType.VarBinary,
-            _ => SqlDbType.NVarChar
-        };
-
-        // ---------- Helpers copied from ThemSachForm ----------
-        private static bool IsLookupColumn(string name) =>
-            name.Equals("NXB_ID", StringComparison.OrdinalIgnoreCase) ||
-            name.Equals("TG_ID",  StringComparison.OrdinalIgnoreCase) ||
-            name.Equals("TL_ID",  StringComparison.OrdinalIgnoreCase);
-
-        private static bool IsDateType(string dt) =>
-            dt.Equals("date", StringComparison.OrdinalIgnoreCase) ||
-            dt.Equals("datetime", StringComparison.OrdinalIgnoreCase) ||
-            dt.Equals("datetime2", StringComparison.OrdinalIgnoreCase) ||
-            dt.Equals("smalldatetime", StringComparison.OrdinalIgnoreCase);
-
-        private static bool IsNumeric(string dt)
-        {
-            dt = dt.ToLowerInvariant();
-            return dt is "int" or "bigint" or "smallint" or "tinyint"
-                   or "decimal" or "numeric" or "money" or "smallmoney"
-                   or "float" or "real";
-        }
-
-        private static bool IsMultiline(ColumnMeta c)
-        {
-            var dt = c.DataType.ToLowerInvariant();
-            return dt is "ntext" or "text" || (dt is "nvarchar" or "varchar" && c.MaxLength < 0); // MAX
-        }
-
-        // Vietnamese labels
-        private static string ToVietnameseLabel(string col) => col.ToLowerInvariant() switch
+        // ===== Helpers =====
+        private static string ToVN(string col) => col.ToLowerInvariant() switch
         {
             "tensach"       => "Tên sách",
             "namxuatban"    => "Năm xuất bản",
-            "tinhtrangsach" => "Tình trạng sách",
             "nxb_id"        => "Nhà Xuất Bản",
             "tg_id"         => "Tác Giả",
             "tl_id"         => "Thể Loại",
-            "soluong"       => "Số lượng",
-            "gia"           => "Giá",
-            "mota"          => "Mô tả",
-            "ngaynhap"      => "Ngày nhập",
-            "vitri"         => "Vị trí",
-            "masach"        => "Mã sách",
+            "tinhtrangsach" => "Tình trạng sách",
             _               => SplitPascal(col)
         };
 
@@ -519,6 +492,53 @@ ORDER BY c.column_id;";
                 chars.Add(c);
             }
             return new string(chars.ToArray());
+        }
+
+        private static int CurrentUserId()
+        {
+            try { return (int)UserSession.NV_ID!; } catch { return 0; }
+        }
+
+        private static void InsertHistory(SqlConnection conn, int sachId, string action, string detail)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"INSERT INTO dbo.LichSuCapNhatSach (NV_ID, SACH_ID, HinhThucCapNhat, ChiTietCapNhat)
+VALUES (@nv, @sid, @act, @detail);";
+            cmd.Parameters.Add(new SqlParameter("@nv", SqlDbType.Int) { Value = CurrentUserId() });
+            cmd.Parameters.Add(new SqlParameter("@sid", SqlDbType.Int) { Value = sachId });
+            cmd.Parameters.Add(new SqlParameter("@act", SqlDbType.NVarChar, 20) { Value = action });
+            cmd.Parameters.Add(new SqlParameter("@detail", SqlDbType.NVarChar, -1) { Value = detail ?? "" });
+            cmd.ExecuteNonQuery();
+        }
+
+        private static string BuildDiff(DataRow before, DataRow after)
+        {
+            static string VN(string col) => col.ToLowerInvariant() switch
+            {
+                "tensach"       => "Tên sách",
+                "namxuatban"    => "Năm xuất bản",
+                "nxb_id"        => "Nhà Xuất Bản",
+                "tg_id"         => "Tác Giả",
+                "tl_id"         => "Thể Loại",
+                "tinhtrangsach" => "Tình trạng sách",
+                _               => col
+            };
+
+            var parts = new List<string>();
+            foreach (DataColumn c in before.Table.Columns)
+            {
+                if (string.Equals(c.ColumnName, IdColumnName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                object b = before[c.ColumnName];
+                object a = after[c.ColumnName];
+                string bs = b == DBNull.Value ? "NULL" : b.ToString();
+                string as_ = a == DBNull.Value ? "NULL" : a.ToString();
+
+                if (!string.Equals(bs, as_, StringComparison.Ordinal))
+                    parts.Add($"{VN(c.ColumnName)}: {bs} -> {as_}");
+            }
+            return parts.Count == 0 ? "" : "Cập nhật: " + string.Join("; ", parts);
         }
     }
 }

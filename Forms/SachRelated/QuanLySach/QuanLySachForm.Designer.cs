@@ -1,21 +1,25 @@
-﻿namespace LibraryManagement.Forms.SachRelated.QuanLySach
+﻿using System.Drawing;
+using System.Windows.Forms;
+
+namespace LibraryManagement.Forms.SachRelated.QuanLySach
 {
-    partial class QuanLySachForm
+    public partial class QuanLySachForm
     {
-        private TableLayoutPanel root;         // header, toolbar, content
+        private TableLayoutPanel root;
         private Label lblTitle;
 
-        private TableLayoutPanel toolbar;      // 1 row, 7 cols (6 buttons + search)
+        private TableLayoutPanel toolbar;
         private Button btnQuanLyNXB;
         private Button btnQuanLyTheLoai;
         private Button btnQuanLyTacGia;
+        private Button btnLichSuCapNhat; // NEW
         private Button btnThemSach;
         private Button btnXoaNhieu;
         private Button btnTimKiem;
         private TextBox txtSearch;
 
         private Panel contentPanel;
-        private DataGridView dgvBooks;
+        private DataGridView dgvSach;
         private Label lblEmpty;
 
         private void InitializeComponent()
@@ -27,35 +31,35 @@
             btnQuanLyNXB = new Button();
             btnQuanLyTheLoai = new Button();
             btnQuanLyTacGia = new Button();
+            btnLichSuCapNhat = new Button();
             btnThemSach = new Button();
             btnXoaNhieu = new Button();
             btnTimKiem = new Button();
             txtSearch = new TextBox();
 
             contentPanel = new Panel();
-            dgvBooks = new DataGridView();
+            dgvSach = new DataGridView();
             lblEmpty = new Label();
 
             SuspendLayout();
 
-            // === Form ===
             AutoScaleMode = AutoScaleMode.Dpi;
             Text = "Quản lý sách";
-            MinimumSize = new Size(1100, 640);
-            StartPosition = FormStartPosition.CenterScreen;
+            MinimumSize = new Size(1000, 600);
+            StartPosition = FormStartPosition.CenterParent;
 
-            // === Root (header / toolbar / content) ===
+            // ===== Root layout
             root.Dock = DockStyle.Fill;
             root.Padding = new Padding(12);
             root.ColumnCount = 1;
             root.RowCount = 3;
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 12F)); // header
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 10F)); // toolbar (slim height)
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 78F)); // content
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 12F)); // toolbar (taller)
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 76F)); // content
             Controls.Add(root);
 
-            // Header label (top-left)
+            // ===== Header
             lblTitle.Text = "Quản lý sách";
             lblTitle.Dock = DockStyle.Fill;
             lblTitle.TextAlign = ContentAlignment.TopLeft;
@@ -63,80 +67,95 @@
             lblTitle.Padding = new Padding(8, 6, 8, 6);
             root.Controls.Add(lblTitle, 0, 0);
 
-            // === Toolbar: 6 wider buttons + search ===
+            // ===== Toolbar layout
             toolbar.Dock = DockStyle.Fill;
-            toolbar.Padding = new Padding(0, 2, 0, 2); // slim vertical padding
-            toolbar.ColumnCount = 7;
+            toolbar.Padding = new Padding(0, 4, 0, 4); // small vertical padding for breathing room
+            toolbar.ColumnCount = 8;
             toolbar.RowCount = 1;
             toolbar.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-
-            // Wider buttons: 6 x 12% = 72%; Search = 28%
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12F)); // NXB
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12F)); // TL
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12F)); // TG
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12F)); // Thêm
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12F)); // Xóa nhiều
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12F)); // Tìm
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28F)); // Search
+            // [NXB 11][Thể loại 11][Tác giả 11][Lịch sử 11][Thêm 12][Xóa nhiều 12][Tìm 10][Search 22]
+            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 11F));
+            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 11F));
+            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 11F));
+            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 11F));
+            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12F));
+            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12F));
+            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10F));
+            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22F));
+            root.Controls.Add(toolbar, 0, 1);
 
             var btnFont = new Font("Segoe UI", 10.5F, FontStyle.Bold, GraphicsUnit.Point);
-            Padding btnPad = new Padding(2, 1, 2, 1);
+            var btnPad  = new Padding(2, 2, 2, 2); // symmetric padding; height comes from taller row
 
             btnQuanLyNXB.Text = "Quản lý NXB";
             btnQuanLyNXB.Dock = DockStyle.Fill;
             btnQuanLyNXB.Font = btnFont;
             btnQuanLyNXB.Margin = btnPad;
-            
-            btnQuanLyTacGia.Text = "Quản lý tác giả";
-            btnQuanLyTacGia.Dock = DockStyle.Fill;
-            btnQuanLyTacGia.Font = btnFont;
-            btnQuanLyTacGia.Margin = btnPad;
+            btnQuanLyNXB.TextAlign = ContentAlignment.MiddleCenter;
 
             btnQuanLyTheLoai.Text = "Quản lý thể loại";
             btnQuanLyTheLoai.Dock = DockStyle.Fill;
             btnQuanLyTheLoai.Font = btnFont;
             btnQuanLyTheLoai.Margin = btnPad;
+            btnQuanLyTheLoai.TextAlign = ContentAlignment.MiddleCenter;
+
+            btnQuanLyTacGia.Text = "Quản lý tác giả";
+            btnQuanLyTacGia.Dock = DockStyle.Fill;
+            btnQuanLyTacGia.Font = btnFont;
+            btnQuanLyTacGia.Margin = btnPad;
+            btnQuanLyTacGia.TextAlign = ContentAlignment.MiddleCenter;
+
+            btnLichSuCapNhat.Text = "Lịch sử cập nhật";
+            btnLichSuCapNhat.Dock = DockStyle.Fill;
+            btnLichSuCapNhat.Font = btnFont;
+            btnLichSuCapNhat.Margin = btnPad;
+            btnLichSuCapNhat.TextAlign = ContentAlignment.MiddleCenter;
 
             btnThemSach.Text = "Thêm sách";
             btnThemSach.Dock = DockStyle.Fill;
             btnThemSach.Font = btnFont;
             btnThemSach.Margin = btnPad;
+            btnThemSach.TextAlign = ContentAlignment.MiddleCenter;
 
             btnXoaNhieu.Text = "Xóa nhiều sách";
             btnXoaNhieu.Dock = DockStyle.Fill;
             btnXoaNhieu.Font = btnFont;
             btnXoaNhieu.Margin = btnPad;
             btnXoaNhieu.Enabled = false;
+            btnXoaNhieu.TextAlign = ContentAlignment.MiddleCenter;
 
             btnTimKiem.Text = "Tìm kiếm";
             btnTimKiem.Dock = DockStyle.Fill;
             btnTimKiem.Font = btnFont;
             btnTimKiem.Margin = btnPad;
+            btnTimKiem.TextAlign = ContentAlignment.MiddleCenter;
 
             txtSearch.Dock = DockStyle.Fill;
-            txtSearch.Margin = new Padding(6, 1, 0, 1);
+            txtSearch.Margin = new Padding(6, 2, 0, 2);
             txtSearch.PlaceholderText = "Nhập tên sách";
             txtSearch.Font = new Font("Segoe UI", 10.5F, FontStyle.Regular, GraphicsUnit.Point);
 
-            toolbar.Controls.AddRange(new Control[]
-            {
-                btnQuanLyNXB, btnQuanLyTacGia, btnQuanLyTheLoai,
-                btnThemSach, btnXoaNhieu, btnTimKiem, txtSearch
-            });
+            toolbar.Controls.Add(btnQuanLyNXB,     0, 0);
+            toolbar.Controls.Add(btnQuanLyTheLoai, 1, 0);
+            toolbar.Controls.Add(btnQuanLyTacGia,  2, 0);
+            toolbar.Controls.Add(btnLichSuCapNhat, 3, 0);
+            toolbar.Controls.Add(btnThemSach,      4, 0);
+            toolbar.Controls.Add(btnXoaNhieu,      5, 0);
+            toolbar.Controls.Add(btnTimKiem,       6, 0);
+            toolbar.Controls.Add(txtSearch,        7, 0);
 
-            root.Controls.Add(toolbar, 0, 1);
-
-            // === Content ===
+            // ===== Content area
             contentPanel.Dock = DockStyle.Fill;
+            root.Controls.Add(contentPanel, 0, 2);
 
-            dgvBooks.Dock = DockStyle.Fill;
-            dgvBooks.AllowUserToAddRows = false;
-            dgvBooks.AllowUserToDeleteRows = false;
-            dgvBooks.ReadOnly = false; // checkbox column editable
-            dgvBooks.MultiSelect = false;
-            dgvBooks.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            dgvBooks.RowHeadersVisible = false;
-            dgvBooks.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            dgvSach.Dock = DockStyle.Fill;
+            dgvSach.AllowUserToAddRows = false;
+            dgvSach.AllowUserToDeleteRows = false;
+            dgvSach.ReadOnly = false; // checkboxes editable
+            dgvSach.MultiSelect = false;
+            dgvSach.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            dgvSach.RowHeadersVisible = false;
+            dgvSach.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
 
             lblEmpty.Text = "Không tìm thấy sách";
             lblEmpty.Dock = DockStyle.Fill;
@@ -144,10 +163,8 @@
             lblEmpty.Font = new Font("Segoe UI", 12F, FontStyle.Italic, GraphicsUnit.Point);
             lblEmpty.Visible = false;
 
-            contentPanel.Controls.Add(dgvBooks);
+            contentPanel.Controls.Add(dgvSach);
             contentPanel.Controls.Add(lblEmpty);
-
-            root.Controls.Add(contentPanel, 0, 2);
 
             ResumeLayout(false);
         }

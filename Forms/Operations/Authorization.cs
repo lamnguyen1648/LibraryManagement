@@ -16,7 +16,7 @@ namespace LibraryManagement.Forms.Operations
         /// </summary>
         public static bool CanAccess(string featureKey)
         {
-            var role = UserSession.RoleName ?? "";
+            var role = UserSession.TenChucVu ?? "";
             var roleNorm = Normalize(role);
 
             switch (featureKey)

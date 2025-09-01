@@ -9,67 +9,127 @@ namespace LibraryManagement
         bool ValidateCredentials(string username, string password);
     }
 
-    /// <summary>
-    /// Central place to obtain SqlConnection for the whole app.
-    /// </summary>
+    /// <summary>Single source of truth for DB connection.</summary>
     public static class Db
     {
-        // Keep a single source of truth for the connection string.
-        // Adjust as needed for your environment.
+        // Adjust to your environment if needed
         public const string ConnStr =
             "server=localhost\\SQLEXPRESS;database=LibraryManagement;user id=sa;password=16482548@a;encrypt=true;trustservercertificate=true;";
 
         public static SqlConnection Create() => new SqlConnection(ConnStr);
     }
 
+    /// <summary>Holds the current signed-in user.</summary>
+    public static class UserSession
+    {
+        public static int NV_ID { get; private set; }
+        public static string TenNV { get; private set; } = "";
+        public static int? CV_ID { get; private set; }
+        public static string? TenChucVu { get; private set; }
+        public static bool IsActive { get; private set; }
+
+        public static void Set(int nvId, string tenNv, int? cvId, string? tenChucVu, bool isActive)
+        {
+            NV_ID = nvId;
+            TenNV = tenNv ?? "";
+            CV_ID = cvId;
+            TenChucVu = tenChucVu;
+            IsActive = isActive;
+        }
+
+        public static void Clear()
+        {
+            NV_ID = 0;
+            TenNV = "";
+            CV_ID = null;
+            TenChucVu = null;
+            IsActive = false;
+        }
+
+        // Convenience check you can use in UI permissions
+        public static bool IsAdmin =>
+            (TenChucVu != null && TenChucVu.Equals("Admin", StringComparison.OrdinalIgnoreCase)) || (CV_ID == 1);
+    }
+
     public sealed class SqlAuthService : IAuthService
     {
         public bool ValidateCredentials(string username, string password)
         {
-            if (string.IsNullOrWhiteSpace(username) || password is null) return false;
+            if (string.IsNullOrWhiteSpace(username) || password is null)
+            {
+                UserSession.Clear();
+                return false;
+            }
 
-            // IMPORTANT: treat disabled accounts as non-matches (same as wrong credentials)
+            // Login can be by TenNV or Mail. We read status and role too.
             const string sql = @"
-select MatKhau
-from dbo.NhanVien
-where TenNV = @u
-  and ISNULL(Status, 1) = 1;"; // if Status is null, treat as active; disabled (0) won't match
+SELECT  nv.NV_ID,
+        nv.TenNV,
+        nv.MatKhau,
+        nv.CV_ID,
+        ISNULL(nv.Status, 1) AS Status,
+        COALESCE(cv.TenChucVu, cv.TenChucVu) AS TenChucVu
+FROM dbo.NhanVien nv
+LEFT JOIN dbo.ChucVu cv ON cv.CV_ID = nv.CV_ID
+WHERE (nv.TenNV = @u OR nv.Mail = @u);";
 
             using var conn = Db.Create();
             using var cmd  = new SqlCommand(sql, conn);
             cmd.Parameters.Add(new SqlParameter("@u", SqlDbType.NVarChar, 128) { Value = username.Trim() });
 
             conn.Open();
-            var dbValue = cmd.ExecuteScalar();
-
-            if (dbValue is not string storedHash || string.IsNullOrWhiteSpace(storedHash))
-                return false;
-
-            bool needsRehash;
-            bool ok = PasswordHasher.Verify(password, storedHash, out needsRehash);
-
-            if (ok && needsRehash)
+            using var rd = cmd.ExecuteReader();
+            if (!rd.Read())
             {
-                TryUpgradeHash(conn, username.Trim(), password);
+                UserSession.Clear();
+                return false;
             }
 
-            return ok;
+            var storedHash = rd["MatKhau"] as string ?? "";
+            var active     = rd["Status"] == DBNull.Value || Convert.ToBoolean(rd["Status"]);
+            bool needsRehash = false;
+            bool ok = !string.IsNullOrWhiteSpace(storedHash) &&
+                      PasswordHasher.Verify(password, storedHash, out needsRehash);
+
+            // Treat disabled as wrong credentials (same UX)
+            if (!ok || !active)
+            {
+                UserSession.Clear();
+                return false;
+            }
+
+            int    nvId      = Convert.ToInt32(rd["NV_ID"]);
+            string tenNv     = rd["TenNV"] as string ?? "";
+            int?   cvId      = rd["CV_ID"] == DBNull.Value ? null : (int?)Convert.ToInt32(rd["CV_ID"]);
+            string? tenChucVu= rd["TenChucVu"] == DBNull.Value ? null : rd["TenChucVu"].ToString();
+
+            // Bind session for the whole app (history logging, permissions, etc.)
+            UserSession.Set(nvId, tenNv, cvId, tenChucVu, isActive: true);
+
+            rd.Close();
+
+            // Best-effort password hash upgrade if needed
+            if (needsRehash)
+            {
+                TryUpgradeHash(conn, nvId, PasswordHasher.HashPassword(password));
+            }
+
+            return true;
         }
 
-        private static void TryUpgradeHash(SqlConnection openConn, string username, string password)
+        private static void TryUpgradeHash(SqlConnection openConn, int nvId, string newHash)
         {
             try
             {
-                string newHash = PasswordHasher.HashPassword(password);
                 using var up = new SqlCommand(
-                    @"update dbo.NhanVien set MatKhau = @h where TenNV = @u", openConn);
+                    "UPDATE dbo.NhanVien SET MatKhau = @h WHERE NV_ID = @id", openConn);
                 up.Parameters.Add(new SqlParameter("@h", SqlDbType.NVarChar, -1) { Value = newHash });
-                up.Parameters.Add(new SqlParameter("@u", SqlDbType.NVarChar, 128) { Value = username });
+                up.Parameters.Add(new SqlParameter("@id", SqlDbType.Int) { Value = nvId });
                 up.ExecuteNonQuery();
             }
             catch
             {
-                // best-effort; ignore
+                // ignore: hash upgrade is best-effort
             }
         }
     }

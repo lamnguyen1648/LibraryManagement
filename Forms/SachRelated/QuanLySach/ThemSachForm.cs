@@ -24,7 +24,9 @@ namespace LibraryManagement.Forms.SachRelated.QuanLySach
 
         private readonly List<ColumnMeta> _cols = new();
         private readonly Dictionary<string, Control> _controlsByColumn = new(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<string> _requiredColumns = new(StringComparer.OrdinalIgnoreCase);
+
+        // Only TenSach is required now
+        private readonly HashSet<string> _requiredColumns = new(StringComparer.OrdinalIgnoreCase) { "TenSach" };
 
         public ThemSachForm()
         {
@@ -57,7 +59,7 @@ namespace LibraryManagement.Forms.SachRelated.QuanLySach
             btnCancel.Click += (_, __) => DialogResult = DialogResult.Cancel;
         }
 
-        // Read DB schema (required vs nullable; exclude identity/computed/QR_Code)
+        // Read DB schema (ignore required-from-nullability; we control required explicitly)
         private void LoadSchema()
         {
             using var conn = Db.Create();
@@ -77,7 +79,6 @@ ORDER BY c.column_id;";
             conn.Open();
             using var rd = cmd.ExecuteReader();
             _cols.Clear();
-            _requiredColumns.Clear();
 
             while (rd.Read())
             {
@@ -96,9 +97,11 @@ ORDER BY c.column_id;";
                     continue;
 
                 _cols.Add(meta);
-                if (!meta.IsNullable)
-                    _requiredColumns.Add(meta.Name);
             }
+
+            // Force required set to ONLY TenSach
+            _requiredColumns.Clear();
+            _requiredColumns.Add("TenSach");
         }
 
         // Build dynamic UI rows: (label + red *) | input
@@ -114,7 +117,7 @@ ORDER BY c.column_id;";
                 grid.RowCount += 1;
                 grid.RowStyles.Add(new RowStyle(SizeType.Percent, 1f)); // equal % heights
 
-                // Left cell: label + star
+                // Left cell: label + star (star only for TenSach)
                 var labelPanel = new FlowLayoutPanel
                 {
                     Dock = DockStyle.Fill,
@@ -225,7 +228,7 @@ ORDER BY c.column_id;";
         // Wire validation to enable/disable Add button
         private void WireValidation()
         {
-            foreach (var (name, control) in _controlsByColumn)
+            foreach (var (_, control) in _controlsByColumn)
             {
                 if (control is TextBox tb)
                     tb.TextChanged += (_, __) => UpdateAddEnabled();
@@ -241,6 +244,7 @@ ORDER BY c.column_id;";
 
         private void UpdateAddEnabled()
         {
+            // Only check TenSach
             bool allOk = true;
 
             foreach (var req in _requiredColumns)
@@ -331,14 +335,16 @@ ORDER BY c.column_id;";
                     if (!_controlsByColumn.TryGetValue(col.Name, out var c)) continue;
 
                     object? value = GetValueFor(col, c, out var dbType);
+
+                    // Only enforce TenSach as required
                     if (value is null || (value is string s && string.IsNullOrWhiteSpace(s)))
                     {
-                        if (col.IsNullable) value = DBNull.Value;
-                        else
+                        if (_requiredColumns.Contains(col.Name))
                         {
                             MessageBox.Show($"Vui lòng nhập: {ToVietnameseLabel(col.Name)}", "Thiếu dữ liệu");
                             return;
                         }
+                        value = DBNull.Value;
                     }
 
                     cols.Add(col.Name);
