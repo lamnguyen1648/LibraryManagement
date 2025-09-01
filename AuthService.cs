@@ -28,7 +28,12 @@ namespace LibraryManagement
         {
             if (string.IsNullOrWhiteSpace(username) || password is null) return false;
 
-            const string sql = @"select MatKhau from NhanVien where TenNV = @u";
+            // IMPORTANT: treat disabled accounts as non-matches (same as wrong credentials)
+            const string sql = @"
+select MatKhau
+from dbo.NhanVien
+where TenNV = @u
+  and ISNULL(Status, 1) = 1;"; // if Status is null, treat as active; disabled (0) won't match
 
             using var conn = Db.Create();
             using var cmd  = new SqlCommand(sql, conn);
@@ -57,7 +62,7 @@ namespace LibraryManagement
             {
                 string newHash = PasswordHasher.HashPassword(password);
                 using var up = new SqlCommand(
-                    @"update NhanVien set MatKhau = @h where TenNV = @u", openConn);
+                    @"update dbo.NhanVien set MatKhau = @h where TenNV = @u", openConn);
                 up.Parameters.Add(new SqlParameter("@h", SqlDbType.NVarChar, -1) { Value = newHash });
                 up.Parameters.Add(new SqlParameter("@u", SqlDbType.NVarChar, 128) { Value = username });
                 up.ExecuteNonQuery();

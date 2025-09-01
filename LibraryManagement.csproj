@@ -13,21 +13,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Compile Update="Forms\LoginForm.cs">
-        <SubType>Form</SubType>
-      </Compile>
-      <Compile Update="Forms\MainForm.cs">
-        <SubType>Form</SubType>
-      </Compile>
-      <Compile Update="Forms\QuanLySach\QuanLySachForm.cs">
-        <SubType>Form</SubType>
-      </Compile>
-      <Compile Update="Forms\QuanLySach\ThemSachForm.cs">
-        <SubType>Form</SubType>
-      </Compile>
-      <Compile Update="Forms\QuanLySach\SuaSachForm.cs">
-        <SubType>Form</SubType>
-      </Compile>
       <Compile Update="Forms\QuanLyNXB\QuanLyNXBForm.cs">
         <SubType>Form</SubType>
       </Compile>
@@ -37,24 +22,41 @@
       <Compile Update="Forms\QuanLyNhaXuatBan\SuaNxbForm.cs">
         <SubType>Form</SubType>
       </Compile>
-      <Compile Update="Forms\QuanLyTheLoai\QuanLyTheLoaiForm.cs">
+      <Compile Update="Forms\QuanLyChucVu\QuanLyChucVuForm.cs">
         <SubType>Form</SubType>
       </Compile>
-      <Compile Update="Forms\QuanLyTheLoai\ThemTheLoaiForm.cs">
+      <Compile Update="Forms\QuanLyChucVu\ThemChucVuForm.cs">
         <SubType>Form</SubType>
       </Compile>
-      <Compile Update="Forms\QuanLyTheLoai\SuaTheLoaiForm.cs">
+      <Compile Update="Forms\QuanLyChucVu\SuaChucVuForm.cs">
         <SubType>Form</SubType>
       </Compile>
-      <Compile Update="Forms\QuanLyTacGia\QuanLyTacGiaForm.cs">
+      <Compile Update="Forms\Operations\LoginForm.cs">
         <SubType>Form</SubType>
       </Compile>
-      <Compile Update="Forms\QuanLyTacGia\ThemTacGiaForm.cs">
+      <Compile Update="Forms\Operations\MainForm.cs">
         <SubType>Form</SubType>
       </Compile>
-      <Compile Update="Forms\QuanLyTacGia\SuaTacGiaForm.cs">
+      <Compile Update="Forms\Operations\Authorization.cs">
         <SubType>Form</SubType>
       </Compile>
+      <Compile Update="Forms\Operations\UserSession.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\DocGiaRelated\QuanLyDocGia\QuanLyDocGiaForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\DocGiaRelated\QuanLyDocGia\SuaDocGiaForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\DocGiaRelated\QuanLyDocGia\ThemDocGiaForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Forms\NhanVienRelated\" />
+      <Folder Include="Forms\SachRelated\" />
     </ItemGroup>
 
 </Project>

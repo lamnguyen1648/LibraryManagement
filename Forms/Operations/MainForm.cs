@@ -1,0 +1,100 @@
+﻿using System;
+using System.Windows.Forms;
+using LibraryManagement.Forms.DocGiaRelated;
+using LibraryManagement.Forms.DocGiaRelated.QuanLyDocGia;
+using LibraryManagement.Forms.SachRelated.QuanLySach;
+using LibraryManagement.Forms.NhanVienRelated.QuanLyNhanVien;
+
+namespace LibraryManagement.Forms.Operations
+{
+    public partial class MainForm : Form
+    {
+        private readonly string _username;
+
+        public MainForm(string username)
+        {
+            _username = username;
+            InitializeComponent();
+
+            lblWelcome.Text = $"Xin chào, {_username}!\r\nChúc một ngày làm việc hiệu quả.";
+
+            // De-dupe and wire clicks
+            btnQuanLySach.Click      -= btnQuanLySach_Click;
+            btnQuanLySach.Click      += btnQuanLySach_Click;
+
+            btnQuanLyNhanVien.Click  -= btnQuanLyNhanVien_Click;
+            btnQuanLyNhanVien.Click  += btnQuanLyNhanVien_Click;
+
+            btnQuanLyPhieuMuon.Click -= btnQuanLyPhieuMuon_Click;
+            btnQuanLyPhieuMuon.Click += btnQuanLyPhieuMuon_Click;
+
+            btnQuanLyDocGia.Click    -= btnQuanLyDocGia_Click;
+            btnQuanLyDocGia.Click    += btnQuanLyDocGia_Click;
+        }
+
+        private void btnQuanLySach_Click(object? sender, EventArgs e)
+        {
+            btnQuanLySach.Enabled = false;
+            try
+            {
+                Hide();
+                using (var f = new QuanLySachForm())
+                {
+                    f.StartPosition = FormStartPosition.CenterParent;
+                    f.ShowDialog(this);
+                }
+                Show();
+                Activate();
+            }
+            finally
+            {
+                btnQuanLySach.Enabled = true;
+            }
+        }
+
+        private void btnQuanLyNhanVien_Click(object? sender, EventArgs e)
+        {
+            // If you kept the Admin-only rule, keep your existing guard here
+            btnQuanLyNhanVien.Enabled = false;
+            try
+            {
+                Hide();
+                using (var f = new QuanLyNhanVienForm())
+                {
+                    f.StartPosition = FormStartPosition.CenterParent;
+                    f.ShowDialog(this);
+                }
+                Show();
+                Activate();
+            }
+            finally
+            {
+                btnQuanLyNhanVien.Enabled = true;
+            }
+        }
+
+        private void btnQuanLyPhieuMuon_Click(object? s, EventArgs e) =>
+            MessageBox.Show("TODO: Mở form Quản lý phiếu mượn", "Placeholder");
+
+        // ✅ New: open Quản lý độc giả
+        private void btnQuanLyDocGia_Click(object? s, EventArgs e)
+        {
+            btnQuanLyDocGia.Enabled = false;
+            try
+            {
+                Hide();
+                using (var f = new QuanLyDocGiaForm())
+                {
+                    f.StartPosition = FormStartPosition.CenterParent;
+                    f.ShowDialog(this);
+                }
+                Show();
+                Activate();
+            }
+            finally
+            {
+                btnQuanLyDocGia.Enabled = true;
+            }
+        }
+    }
+}
