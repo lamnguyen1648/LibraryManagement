@@ -55,6 +55,30 @@
       <Compile Update="Forms\SachRelated\QuanLySach\BookHistoryLogger.cs">
         <SubType>Form</SubType>
       </Compile>
+      <Compile Update="Forms\SachRelated\LichSuCapNhatSach\XemLichSuForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\PhieuMuonRelated\QuanLyPhieuMuon\QuanLyPhieuMuon.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\PhieuMuonRelated\QuanLyPhieuMuon\ThemPhieuMuonForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\PhieuMuonRelated\QuanLyPhieuMuon\SuaPhieuMuonForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\PhieuMuonRelated\QuanLyPhieuMuon\ChiTietPhieuMuonForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\PhieuMuonRelated\QuanLyPhieuPhat\QuanLyPhieuPhatForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\PhieuMuonRelated\QuanLyPhieuPhat\ThemPhieuPhatForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\PhieuMuonRelated\QuanLyPhieuPhat\SuaPhieuPhatForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
     </ItemGroup>
 
     <ItemGroup>

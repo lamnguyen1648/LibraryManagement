@@ -1,4 +1,5 @@
-﻿using System;
+﻿// LichSuCapNhatSachForm.cs
+using System;
 using System.Data;
 using System.Drawing;
 using System.Linq;
@@ -14,7 +15,6 @@ namespace LibraryManagement.Forms.SachRelated.LichSuCapNhatSach
 
         public LichSuCapNhatSachForm()
         {
-            // Use a unique initializer name to avoid any InitializeComponent() ambiguity
             InitializeComponent_LichSuCapNhatSach();
 
             dgvLog.AutoGenerateColumns = false;
@@ -28,12 +28,20 @@ namespace LibraryManagement.Forms.SachRelated.LichSuCapNhatSach
             _bs.DataSource = _dt;
             dgvLog.DataSource = _bs;
 
+            // Search & load
             Load += (_, __) => Reload();
             btnTimKiem.Click += (_, __) => Reload(txtSearch.Text?.Trim());
             txtSearch.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) Reload(txtSearch.Text?.Trim()); };
 
+            // STT reliability
             dgvLog.DataBindingComplete += (_, __) => UpdateStt();
             dgvLog.Sorted += (_, __) => UpdateStt();
+            dgvLog.RowsAdded += (_, __) => UpdateStt();
+            dgvLog.DataSourceChanged += (_, __) => UpdateStt();
+
+            // “Xem chi tiết” button
+            dgvLog.CellPainting += DgvLog_CellPainting;
+            dgvLog.CellMouseClick += DgvLog_CellMouseClick;
         }
 
         private void Reload(string? q = null)
@@ -68,15 +76,15 @@ ORDER BY ls.NgayCapNhat DESC;";
             using var da = new SqlDataAdapter(cmd);
             da.Fill(_dt);
 
-            BuildColumns(); // stable widths/order every time
+            BuildColumns(); // keep widths/order stable
             lblEmpty.Visible = _dt.Rows.Count == 0;
+            UpdateStt();
         }
 
         private void BuildColumns()
         {
             if (dgvLog.Columns.Count > 0)
             {
-                // If columns already built, just make sure date format stays
                 if (dgvLog.Columns.Contains("NgayCapNhat"))
                     dgvLog.Columns["NgayCapNhat"].DefaultCellStyle.Format = "dd/MM/yyyy HH:mm:ss";
                 UpdateStt();
@@ -91,11 +99,12 @@ ORDER BY ls.NgayCapNhat DESC;";
                 Name = "STT",
                 HeaderText = "STT",
                 ReadOnly = true,
+                SortMode = DataGridViewColumnSortMode.NotSortable,
                 AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
                 FillWeight = 8
             });
 
-            // (Hidden) Technical ID – keep for reference but not shown
+            // Hidden technical ID
             var idCol = new DataGridViewTextBoxColumn
             {
                 Name = "LichSuCapNhatSach_ID",
@@ -127,7 +136,7 @@ ORDER BY ls.NgayCapNhat DESC;";
                 FillWeight = 24
             });
 
-            // [3] Ngày cập nhật (format dd/MM/yyyy HH:mm:ss)
+            // [3] Ngày cập nhật
             var dtCol = new DataGridViewTextBoxColumn
             {
                 Name = "NgayCapNhat",
@@ -151,15 +160,17 @@ ORDER BY ls.NgayCapNhat DESC;";
                 FillWeight = 12
             });
 
-            // [5] Chi tiết
+            // NOTE: We intentionally DO NOT add ChiTietCapNhat as a visible column,
+            // but we keep it in the DataTable so the detail viewer can show it.
+
+            // [last] Chức năng
             dgvLog.Columns.Add(new DataGridViewTextBoxColumn
             {
-                Name = "ChiTietCapNhat",
-                DataPropertyName = "ChiTietCapNhat",
-                HeaderText = "Chi tiết",
+                Name = "ChucNang",
+                HeaderText = "Chức năng",
                 ReadOnly = true,
                 AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
-                FillWeight = 20
+                FillWeight = 12
             });
         }
 
@@ -167,9 +178,53 @@ ORDER BY ls.NgayCapNhat DESC;";
         {
             var sttIdx = dgvLog.Columns["STT"]?.Index ?? -1;
             if (sttIdx < 0) return;
+
             for (int i = 0; i < dgvLog.Rows.Count; i++)
-                if (!dgvLog.Rows[i].IsNewRow)
-                    dgvLog.Rows[i].Cells[sttIdx].Value = (i + 1).ToString();
+            {
+                var row = dgvLog.Rows[i];
+                if (!row.IsNewRow)
+                    row.Cells[sttIdx].Value = (i + 1).ToString();
+            }
         }
+
+        // ====== “Xem chi tiết” button drawing & click ======
+        private void DgvLog_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
+        {
+            if (e.RowIndex < 0) return;
+            if (dgvLog.Columns[e.ColumnIndex].Name != "ChucNang") return;
+
+            e.PaintBackground(e.ClipBounds, true);
+
+            var cell = e.CellBounds;
+            int padding = Math.Max(2, cell.Height / 10);
+            int btnWidth = cell.Width - padding * 2;
+            int btnHeight = cell.Height - padding * 2;
+            var btnRect = new Rectangle(cell.X + padding, cell.Y + padding, btnWidth, btnHeight);
+
+            ButtonRenderer.DrawButton(
+                e.Graphics, btnRect, "Xem chi tiết", e.CellStyle.Font, false,
+                System.Windows.Forms.VisualStyles.PushButtonState.Default);
+
+            e.Handled = true;
+        }
+
+        // inside LichSuCapNhatSachForm.cs
+        private void DgvLog_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.Button != MouseButtons.Left) return;
+            if (dgvLog.Columns[e.ColumnIndex].Name != "ChucNang") return;
+
+            var cell = dgvLog.GetCellDisplayRectangle(e.ColumnIndex, e.RowIndex, false);
+            int padding = Math.Max(2, cell.Height / 10);
+            var btnRect = new Rectangle(cell.X + padding, cell.Y + padding, cell.Width - padding * 2, cell.Height - padding * 2);
+            var click = dgvLog.PointToClient(Cursor.Position);
+            if (!btnRect.Contains(click)) return;
+
+            if (dgvLog.Rows[e.RowIndex].DataBoundItem is not DataRowView drv) return;
+
+            using var dlg = new LibraryManagement.Forms.SachRelated.LichSuCapNhatSach.XemChiTietForm(drv.Row);
+            dlg.ShowDialog(this);
+        }
+
     }
 }

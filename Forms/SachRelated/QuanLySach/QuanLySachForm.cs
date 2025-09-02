@@ -35,7 +35,7 @@ namespace LibraryManagement.Forms.SachRelated.QuanLySach
             btnXoaNhieu.Click += (_, __) => BulkDelete();
             btnLichSuCapNhat.Click += (_, __) => OpenLichSu();
 
-            btnQuanLyNXB.Click += (_, __) => OpenQuanLyNXB();
+            btnQuanLyNXB.Click += (_, __) => OpenQuanLyNxb();
             btnQuanLyTheLoai.Click += (_, __) => OpenQuanLyTheLoai();
             btnQuanLyTacGia.Click += (_, __) => OpenQuanLyTacGia();
 
@@ -329,7 +329,7 @@ ORDER BY s.Sach_ID DESC;";
         }
 
         // === Navigations (adjust namespaces if needed) ===
-        private void OpenQuanLyNXB()
+        private void OpenQuanLyNxb()
         {
             try
             {

@@ -4,6 +4,8 @@ using LibraryManagement.Forms.DocGiaRelated;
 using LibraryManagement.Forms.DocGiaRelated.QuanLyDocGia;
 using LibraryManagement.Forms.SachRelated.QuanLySach;
 using LibraryManagement.Forms.NhanVienRelated.QuanLyNhanVien;
+// 👇 Add this using to reach the new form
+using LibraryManagement.Forms.QuanLyPhieuMuon;
 
 namespace LibraryManagement.Forms.Operations
 {
@@ -54,7 +56,6 @@ namespace LibraryManagement.Forms.Operations
 
         private void btnQuanLyNhanVien_Click(object? sender, EventArgs e)
         {
-            // If you kept the Admin-only rule, keep your existing guard here
             btnQuanLyNhanVien.Enabled = false;
             try
             {
@@ -73,11 +74,28 @@ namespace LibraryManagement.Forms.Operations
             }
         }
 
-        private void btnQuanLyPhieuMuon_Click(object? s, EventArgs e) =>
-            MessageBox.Show("TODO: Mở form Quản lý phiếu mượn", "Placeholder");
+        // ✅ Now opens QuanLyPhieuMuonForm
+        private void btnQuanLyPhieuMuon_Click(object? sender, EventArgs e)
+        {
+            btnQuanLyPhieuMuon.Enabled = false;
+            try
+            {
+                Hide();
+                using (var f = new QuanLyPhieuMuonForm())
+                {
+                    f.StartPosition = FormStartPosition.CenterParent;
+                    f.ShowDialog(this);
+                }
+                Show();
+                Activate();
+            }
+            finally
+            {
+                btnQuanLyPhieuMuon.Enabled = true;
+            }
+        }
 
-        // ✅ New: open Quản lý độc giả
-        private void btnQuanLyDocGia_Click(object? s, EventArgs e)
+        private void btnQuanLyDocGia_Click(object? sender, EventArgs e)
         {
             btnQuanLyDocGia.Enabled = false;
             try
