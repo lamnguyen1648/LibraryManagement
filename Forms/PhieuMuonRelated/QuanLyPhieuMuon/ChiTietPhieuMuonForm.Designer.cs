@@ -1,7 +1,4 @@
-﻿using System.Drawing;
-using System.Windows.Forms;
-
-namespace LibraryManagement.Forms.QuanLyPhieuMuon
+﻿namespace LibraryManagement.Forms.PhieuMuonRelated.QuanLyPhieuMuon
 {
     partial class ChiTietPhieuMuonForm
     {

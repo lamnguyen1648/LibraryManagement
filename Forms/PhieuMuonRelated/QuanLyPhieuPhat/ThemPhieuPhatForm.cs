@@ -1,12 +1,9 @@
-﻿using System;
-using System.Data;
+﻿using System.Data;
 using System.Globalization;
-using System.Linq;
 using System.Reflection;
-using System.Windows.Forms;
 using Microsoft.Data.SqlClient;
 
-namespace LibraryManagement.Forms.QuanLyPhieuPhat
+namespace LibraryManagement.Forms.PhieuMuonRelated.QuanLyPhieuPhat
 {
     public partial class ThemPhieuPhatForm : Form
     {
@@ -196,8 +193,7 @@ order by pm.PM_ID";
             {
                 value = 0; return false;
             }
-            // enforce minimum 1.000 VND
-            return value >= 1000m;
+            return value >= 0m;
         }
 
         private void AnyInputChanged(object? sender, EventArgs e) => UpdateSaveButtonState();

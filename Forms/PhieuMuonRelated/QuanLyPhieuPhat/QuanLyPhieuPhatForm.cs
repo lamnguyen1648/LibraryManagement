@@ -1,16 +1,13 @@
-﻿using System;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Windows.Forms;
+﻿using System.Data;
 using Microsoft.Data.SqlClient;
 
-namespace LibraryManagement.Forms.QuanLyPhieuPhat
+namespace LibraryManagement.Forms.PhieuMuonRelated.QuanLyPhieuPhat
 {
     public partial class QuanLyPhieuPhatForm : Form
     {
         private const string TableName    = "PhieuPhat";
         private const string IdColumnName = "PP_ID";
+        private const string SearchHint   = "Nhập từ khóa (VD: Lý do)";
 
         private readonly DataTable _pp = new();
         private readonly BindingSource _bs = new();
@@ -19,11 +16,26 @@ namespace LibraryManagement.Forms.QuanLyPhieuPhat
         {
             InitializeComponent();
 
+            // placeholder like QuanLyPhieuMuon
+            txtSearch.ForeColor = System.Drawing.SystemColors.GrayText;
+            txtSearch.Text = SearchHint;
+            txtSearch.GotFocus += (_, __) =>
+            {
+                if (txtSearch.Text == SearchHint) { txtSearch.Text = ""; txtSearch.ForeColor = System.Drawing.SystemColors.WindowText; }
+            };
+            txtSearch.LostFocus += (_, __) =>
+            {
+                if (string.IsNullOrWhiteSpace(txtSearch.Text)) { txtSearch.Text = SearchHint; txtSearch.ForeColor = System.Drawing.SystemColors.GrayText; }
+            };
+
             Load += (_, __) => ReloadData();
 
             // wire once
             btnThem.Click     -= BtnThem_Click;     btnThem.Click     += BtnThem_Click;
             btnXoaNhieu.Click -= BtnXoaNhieu_Click; btnXoaNhieu.Click += BtnXoaNhieu_Click;
+
+            btnTimKiem.Click  -= BtnTimKiem_Click;  btnTimKiem.Click  += BtnTimKiem_Click;
+            txtSearch.KeyDown -= TxtSearch_KeyDown; txtSearch.KeyDown += TxtSearch_KeyDown;
 
             dgvPP.AutoGenerateColumns = false;
             dgvPP.CurrentCellDirtyStateChanged += (_, __) =>
@@ -42,15 +54,16 @@ namespace LibraryManagement.Forms.QuanLyPhieuPhat
             dgvPP.CellPainting   += DgvPP_CellPainting;   // draw Sửa/Xóa
             dgvPP.CellMouseClick += DgvPP_CellMouseClick; // handle click
 
-            _bs.DataSource = _pp;
+            _bs.DataSource = _pp.DefaultView;
             dgvPP.DataSource = _bs;
         }
 
+        // ===== Toolbar =====
         private void BtnThem_Click(object? s, EventArgs e)
         {
             using var f = new ThemPhieuPhatForm();
             if (f.ShowDialog(this) == DialogResult.OK)
-                ReloadData();
+                ReloadData(GetSearchValue());
         }
 
         private void BtnXoaNhieu_Click(object? s, EventArgs e)
@@ -73,11 +86,20 @@ namespace LibraryManagement.Forms.QuanLyPhieuPhat
             if (confirm != DialogResult.Yes) return;
 
             ExecuteDeleteByIds(ids);
-            ReloadData();
+            ReloadData(GetSearchValue());
         }
 
+        private string? GetSearchValue()
+        {
+            var t = txtSearch.Text?.Trim();
+            return string.IsNullOrEmpty(t) || t == SearchHint ? null : t;
+        }
+
+        private void BtnTimKiem_Click(object? s, EventArgs e) => ApplyFilter(GetSearchValue());
+        private void TxtSearch_KeyDown(object? s, KeyEventArgs e) { if (e.KeyCode == Keys.Enter) ApplyFilter(GetSearchValue()); }
+
         // ===== Data load =====
-        private void ReloadData()
+        private void ReloadData(string? q = null)
         {
             _pp.Clear();
 
@@ -98,6 +120,23 @@ namespace LibraryManagement.Forms.QuanLyPhieuPhat
             UpdateEmptyState();
             UpdateBulkDeleteButtonState();
             UpdateSttValues();
+            ApplyFilter(q);
+        }
+
+        private void ApplyFilter(string? q)
+        {
+            var dv = _pp.DefaultView;
+            if (string.IsNullOrWhiteSpace(q))
+            {
+                dv.RowFilter = "";
+                return;
+            }
+            string esc = q.Replace("'", "''");
+            dv.RowFilter =
+                $"Convert([PhieuMuon], 'System.String') LIKE '%{esc}%' OR " +
+                $"Convert([NhanVien],  'System.String') LIKE '%{esc}%' OR " +
+                $"Convert([LyDo],      'System.String') LIKE '%{esc}%' OR " +
+                $"Convert([SoTienPhat],'System.String') LIKE '%{esc}%'";
         }
 
         private void ApplyNhanVienDisplay()
@@ -107,7 +146,6 @@ namespace LibraryManagement.Forms.QuanLyPhieuPhat
                 _pp.Columns.Add(new DataColumn("NhanVien", typeof(string)));
 
             var map = BuildLookupForNhanVien();
-
             foreach (DataRow r in _pp.Rows)
             {
                 var idObj = r["NV_ID"];
@@ -127,7 +165,6 @@ namespace LibraryManagement.Forms.QuanLyPhieuPhat
             try
             {
                 using var conn = Db.Create(); conn.Open();
-                // choose a display column
                 var probe = new DataTable();
                 using (var da = new SqlDataAdapter("select top(0) * from NhanVien", conn)) da.Fill(probe);
                 string displayCol =
@@ -155,7 +192,6 @@ namespace LibraryManagement.Forms.QuanLyPhieuPhat
                 _pp.Columns.Add(new DataColumn("PhieuMuon", typeof(string)));
 
             var map = BuildLookupForPhieuMuon();
-
             foreach (DataRow r in _pp.Rows)
             {
                 var idObj = r["PM_ID"];
@@ -163,7 +199,7 @@ namespace LibraryManagement.Forms.QuanLyPhieuPhat
                 if (idObj != DBNull.Value && idObj != null)
                 {
                     var id = Convert.ToInt32(idObj);
-                    display = map.TryGetValue(id, out var name) ? name : $"PM {id}";
+                    display = map.TryGetValue(id, out var name) ? name : $"{id}";
                 }
                 r["PhieuMuon"] = display;
             }
@@ -176,7 +212,6 @@ namespace LibraryManagement.Forms.QuanLyPhieuPhat
             {
                 using var conn = Db.Create(); conn.Open();
 
-                // detect DocGia name column
                 var probeDG = new DataTable();
                 using (var da0 = new SqlDataAdapter("select top(0) * from DocGia", conn)) da0.Fill(probeDG);
                 string dgNameCol =
@@ -185,10 +220,10 @@ namespace LibraryManagement.Forms.QuanLyPhieuPhat
                     ?? probeDG.Columns.Cast<DataColumn>().FirstOrDefault(c => c.DataType == typeof(string))?.ColumnName
                     ?? "DG_ID";
 
-                // Join PM with DocGia to build nice display text
+                // NO "PM " prefix
                 string sql = $@"
 select pm.PM_ID,
-       'PM ' + cast(pm.PM_ID as nvarchar(20)) +
+       cast(pm.PM_ID as nvarchar(20)) +
        case when dg.{dgNameCol} is not null then ' - ' + cast(dg.{dgNameCol} as nvarchar(255)) else '' end as TenHienThi
 from PhieuMuon pm
 left join DocGia dg on dg.DG_ID = pm.DG_ID";
@@ -198,7 +233,7 @@ left join DocGia dg on dg.DG_ID = pm.DG_ID";
                 foreach (DataRow r in dt.Rows)
                 {
                     int k = Convert.ToInt32(r["PM_ID"]);
-                    string v = r["TenHienThi"]?.ToString() ?? $"PM {k}";
+                    string v = r["TenHienThi"]?.ToString() ?? $"{k}";
                     if (!map.ContainsKey(k)) map.Add(k, v);
                 }
             }
@@ -299,21 +334,8 @@ left join DocGia dg on dg.DG_ID = pm.DG_ID";
             "phieumuon"   => "Phiếu mượn",
             "lydo"        => "Lý do",
             "sotienphat"  => "Số tiền phạt",
-            _             => SplitPascal(col)
+            _             => col
         };
-
-        private static string SplitPascal(string s)
-        {
-            var list = new System.Collections.Generic.List<char>(s.Length * 2);
-            for (int i = 0; i < s.Length; i++)
-            {
-                char c = s[i];
-                if (i > 0 && char.IsUpper(c) && (char.IsLower(s[i - 1]) || (i + 1 < s.Length && char.IsLower(s[i + 1]))))
-                    list.Add(' ');
-                list.Add(c);
-            }
-            return new string(list.ToArray());
-        }
 
         private void UpdateEmptyState() => lblEmpty.Visible = _pp.Rows.Count == 0;
 
@@ -353,8 +375,8 @@ left join DocGia dg on dg.DG_ID = pm.DG_ID";
             int w = (cell.Width - (pad * 3)) / 2;
             int h = cell.Height - (pad * 2);
 
-            var editR = new Rectangle(cell.X + pad, cell.Y + pad, w, h);
-            var delR  = new Rectangle(editR.Right + pad, cell.Y + pad, w, h);
+            var editR = new System.Drawing.Rectangle(cell.X + pad, cell.Y + pad, w, h);
+            var delR  = new System.Drawing.Rectangle(editR.Right + pad, cell.Y + pad, w, h);
 
             ButtonRenderer.DrawButton(e.Graphics, editR, "Sửa", e.CellStyle.Font, false,
                 System.Windows.Forms.VisualStyles.PushButtonState.Default);
@@ -374,8 +396,8 @@ left join DocGia dg on dg.DG_ID = pm.DG_ID";
             int pad = Math.Max(2, cell.Height / 10);
             int w = (cell.Width - (pad * 3)) / 2;
 
-            var editR = new Rectangle(cell.X + pad, cell.Y + pad, w, cell.Height - (pad * 2));
-            var delR  = new Rectangle(editR.Right + pad, cell.Y + pad, w, cell.Height - (pad * 2));
+            var editR = new System.Drawing.Rectangle(cell.X + pad, cell.Y + pad, w, cell.Height - (pad * 2));
+            var delR  = new System.Drawing.Rectangle(editR.Right + pad, cell.Y + pad, w, cell.Height - (pad * 2));
             var click = dgvPP.PointToClient(Cursor.Position);
 
             if (editR.Contains(click)) EditRow(e.RowIndex);
@@ -389,7 +411,7 @@ left join DocGia dg on dg.DG_ID = pm.DG_ID";
 
             using var f = new SuaPhieuPhatForm(id.Value);
             if (f.ShowDialog(this) == DialogResult.OK)
-                ReloadData();
+                ReloadData(GetSearchValue());
         }
 
         private void DeleteSingle(int rowIndex)
@@ -402,7 +424,7 @@ left join DocGia dg on dg.DG_ID = pm.DG_ID";
             if (confirm != DialogResult.Yes) return;
 
             ExecuteDeleteByIds(new[] { id.Value });
-            ReloadData();
+            ReloadData(GetSearchValue());
         }
 
         private int? GetRowId(DataGridViewRow row)

@@ -1,10 +1,7 @@
-﻿using System;
-using System.Data;
-using System.Linq;
-using System.Windows.Forms;
+﻿using System.Data;
 using Microsoft.Data.SqlClient;
 
-namespace LibraryManagement.Forms.QuanLyPhieuMuon
+namespace LibraryManagement.Forms.PhieuMuonRelated.QuanLyPhieuMuon
 {
     public partial class ChiTietPhieuMuonForm : Form
     {

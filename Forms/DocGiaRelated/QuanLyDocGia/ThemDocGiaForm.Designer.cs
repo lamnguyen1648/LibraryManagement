@@ -1,4 +1,4 @@
-﻿namespace LibraryManagement.Forms.DocGiaRelated
+﻿namespace LibraryManagement.Forms.DocGiaRelated.QuanLyDocGia
 {
     public partial class ThemDocGiaForm
     {

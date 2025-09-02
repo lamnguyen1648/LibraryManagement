@@ -1,16 +1,15 @@
-﻿using System;
-using System.Data;
+﻿using System.Data;
 using System.Globalization;
-using System.Linq;
-using System.Windows.Forms;
 using Microsoft.Data.SqlClient;
 
-namespace LibraryManagement.Forms.QuanLyPhieuPhat
+namespace LibraryManagement.Forms.PhieuMuonRelated.QuanLyPhieuPhat
 {
     public partial class SuaPhieuPhatForm : Form
     {
         private readonly int _ppId;
         private int _nvIdFromRow;
+        private int _pmId; // NEW: to update PhieuMuon status
+        private decimal _originalMoney; // NEW: detect first edit
 
         private readonly CultureInfo _vi = new("vi-VN");
         private bool _formattingMoney;
@@ -21,18 +20,24 @@ namespace LibraryManagement.Forms.QuanLyPhieuPhat
             InitializeComponent();
 
             StartPosition = FormStartPosition.CenterParent;
-            AcceptButton  = btnLuu;
-            CancelButton  = btnHuy;
+            AcceptButton = btnLuu;
+            CancelButton = btnHuy;
 
-            btnLuu.Click -= BtnLuu_Click; btnLuu.Click += BtnLuu_Click;
-            btnHuy.Click -= BtnHuy_Click; btnHuy.Click += BtnHuy_Click;
+            btnLuu.Click -= BtnLuu_Click;
+            btnLuu.Click += BtnLuu_Click;
+            btnHuy.Click -= BtnHuy_Click;
+            btnHuy.Click += BtnHuy_Click;
 
-            cbPhieuMuon.SelectedIndexChanged -= AnyInputChanged; cbPhieuMuon.SelectedIndexChanged += AnyInputChanged;
-            txtLyDo.TextChanged              -= AnyInputChanged; txtLyDo.TextChanged              += AnyInputChanged;
+            cbPhieuMuon.SelectedIndexChanged -= AnyInputChanged;
+            cbPhieuMuon.SelectedIndexChanged += AnyInputChanged;
+            txtLyDo.TextChanged -= AnyInputChanged;
+            txtLyDo.TextChanged += AnyInputChanged;
 
             // MONEY rules
-            txtSoTien.KeyPress    -= TxtSoTien_KeyPress;    txtSoTien.KeyPress    += TxtSoTien_KeyPress;
-            txtSoTien.TextChanged -= TxtSoTien_TextChanged; txtSoTien.TextChanged += TxtSoTien_TextChanged;
+            txtSoTien.KeyPress -= TxtSoTien_KeyPress;
+            txtSoTien.KeyPress += TxtSoTien_KeyPress;
+            txtSoTien.TextChanged -= TxtSoTien_TextChanged;
+            txtSoTien.TextChanged += TxtSoTien_TextChanged;
 
             Load += (_, __) =>
             {
@@ -48,13 +53,14 @@ namespace LibraryManagement.Forms.QuanLyPhieuPhat
         {
             try
             {
-                using var conn = Db.Create(); conn.Open();
+                using var conn = Db.Create();
+                conn.Open();
 
                 var probeDG = new DataTable();
                 using (var da0 = new SqlDataAdapter("select top(0) * from DocGia", conn)) da0.Fill(probeDG);
                 string dgNameCol =
                     new[] { "TenDocGia", "HoTen", "Ten", "TenDG", "HoVaTen" }
-                    .FirstOrDefault(probeDG.Columns.Contains)
+                        .FirstOrDefault(probeDG.Columns.Contains)
                     ?? probeDG.Columns.Cast<DataColumn>().FirstOrDefault(c => c.DataType == typeof(string))?.ColumnName
                     ?? "DG_ID";
 
@@ -67,11 +73,12 @@ left join DocGia dg on dg.DG_ID = pm.DG_ID
 order by pm.PM_ID";
 
                 using var da = new SqlDataAdapter(sql, conn);
-                var list = new DataTable(); da.Fill(list);
+                var list = new DataTable();
+                da.Fill(list);
 
                 cbPhieuMuon.DisplayMember = "TenHienThi";
-                cbPhieuMuon.ValueMember   = "PM_ID";
-                cbPhieuMuon.DataSource    = list;
+                cbPhieuMuon.ValueMember = "PM_ID";
+                cbPhieuMuon.DataSource = list;
             }
             catch
             {
@@ -84,32 +91,33 @@ order by pm.PM_ID";
         {
             try
             {
-                using var conn = Db.Create(); conn.Open();
+                using var conn = Db.Create();
+                conn.Open();
                 using var da = new SqlDataAdapter("select * from PhieuPhat where PP_ID=@id", conn);
                 da.SelectCommand!.Parameters.Add(new SqlParameter("@id", SqlDbType.Int) { Value = _ppId });
-                var dt = new DataTable(); da.Fill(dt);
+                var dt = new DataTable();
+                da.Fill(dt);
                 if (dt.Rows.Count == 0)
                 {
                     MessageBox.Show("Không tìm thấy phiếu phạt.", "Lỗi");
-                    DialogResult = DialogResult.Cancel; return;
+                    DialogResult = DialogResult.Cancel;
+                    return;
                 }
+
                 var r = dt.Rows[0];
 
                 _nvIdFromRow = Convert.ToInt32(r["NV_ID"]);
                 txtNhanVien.Text = ResolveNhanVienName(_nvIdFromRow);
 
+                _pmId = Convert.ToInt32(r["PM_ID"]);
                 if (cbPhieuMuon.DataSource != null)
-                    cbPhieuMuon.SelectedValue = Convert.ToInt32(r["PM_ID"]);
+                    cbPhieuMuon.SelectedValue = _pmId;
 
-                // format money as vi-VN thousands
-                if (r["SoTienPhat"] != DBNull.Value)
-                {
-                    var money = Convert.ToDecimal(r["SoTienPhat"]);
-                    _formattingMoney = true;
-                    txtSoTien.Text = string.Format(_vi, "{0:N0}", money);
-                    _formattingMoney = false;
-                }
-                else txtSoTien.Text = "";
+                // money
+                _originalMoney = r["SoTienPhat"] == DBNull.Value ? 0m : Convert.ToDecimal(r["SoTienPhat"]);
+                _formattingMoney = true;
+                txtSoTien.Text = string.Format(_vi, "{0:N0}", _originalMoney);
+                _formattingMoney = false;
 
                 txtLyDo.Text = r["LyDo"] == DBNull.Value ? "" : r["LyDo"].ToString();
             }
@@ -125,7 +133,8 @@ order by pm.PM_ID";
         {
             try
             {
-                using var conn = Db.Create(); conn.Open();
+                using var conn = Db.Create();
+                conn.Open();
                 var probe = new DataTable();
                 using (var da = new SqlDataAdapter("select top(0) * from NhanVien", conn)) da.Fill(probe);
                 string displayCol =
@@ -138,7 +147,10 @@ order by pm.PM_ID";
                 var name = cmd.ExecuteScalar();
                 return name?.ToString() ?? $"NV {nvId}";
             }
-            catch { return $"NV {nvId}"; }
+            catch
+            {
+                return $"NV {nvId}";
+            }
         }
 
         // ===== Money helpers =====
@@ -153,9 +165,7 @@ order by pm.PM_ID";
             if (_formattingMoney) return;
 
             var digits = new string(txtSoTien.Text.Where(char.IsDigit).ToArray());
-            string formatted = string.IsNullOrEmpty(digits)
-                ? ""
-                : string.Format(_vi, "{0:N0}", long.Parse(digits));
+            string formatted = string.IsNullOrEmpty(digits) ? "" : string.Format(_vi, "{0:N0}", long.Parse(digits));
 
             _formattingMoney = true;
             txtSoTien.Text = formatted;
@@ -170,13 +180,17 @@ order by pm.PM_ID";
             var digits = new string(txtSoTien.Text.Where(char.IsDigit).ToArray());
             if (string.IsNullOrEmpty(digits))
             {
-                value = 0; return false;
+                value = 0;
+                return false; // empty -> invalid
             }
+
             if (!decimal.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out value))
             {
-                value = 0; return false;
+                value = 0;
+                return false;
             }
-            return value >= 1000m;
+
+            return value >= 0m; // ALLOW zero
         }
 
         private void AnyInputChanged(object? sender, EventArgs e) => UpdateSaveButtonState();
@@ -193,27 +207,62 @@ order by pm.PM_ID";
         {
             if (!btnLuu.Enabled) return;
 
-            if (!TryGetMoneyValue(out var money))
+            if (!TryGetMoneyValue(out var newMoney))
             {
-                MessageBox.Show("Số tiền phạt tối thiểu là 1.000 VND.", "Giá trị không hợp lệ");
-                txtSoTien.Focus(); return;
+                MessageBox.Show("Giá trị không hợp lệ.", "Lỗi");
+                txtSoTien.Focus();
+                return;
             }
 
             try
             {
-                using var conn = Db.Create(); conn.Open();
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = @"
+                using var conn = Db.Create();
+                conn.Open();
+                using var tx = conn.BeginTransaction();
+
+                // 1) Update PhieuPhat
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.Transaction = tx;
+                    cmd.CommandText = @"
 update PhieuPhat
    set NV_ID=@nv, PM_ID=@pm, LyDo=@lydo, SoTienPhat=@tien
  where PP_ID=@id;";
-                cmd.Parameters.Add(new SqlParameter("@nv",   SqlDbType.Int)         { Value = _nvIdFromRow });
-                cmd.Parameters.Add(new SqlParameter("@pm",   SqlDbType.Int)         { Value = (int)cbPhieuMuon.SelectedValue });
-                cmd.Parameters.Add(new SqlParameter("@lydo", SqlDbType.NVarChar, -1){ Value = (object?)txtLyDo.Text?.Trim() ?? DBNull.Value });
-                cmd.Parameters.Add(new SqlParameter("@tien", SqlDbType.Decimal)     { Value = money });
-                cmd.Parameters.Add(new SqlParameter("@id",   SqlDbType.Int)         { Value = _ppId });
+                    cmd.Parameters.Add(new SqlParameter("@nv", SqlDbType.Int) { Value = _nvIdFromRow });
+                    cmd.Parameters.Add(
+                        new SqlParameter("@pm", SqlDbType.Int) { Value = (int)cbPhieuMuon.SelectedValue });
+                    cmd.Parameters.Add(new SqlParameter("@lydo", SqlDbType.NVarChar, -1)
+                        { Value = (object?)txtLyDo.Text?.Trim() ?? DBNull.Value });
+                    cmd.Parameters.Add(new SqlParameter("@tien", SqlDbType.Decimal) { Value = newMoney });
+                    cmd.Parameters.Add(new SqlParameter("@id", SqlDbType.Int) { Value = _ppId });
+                    cmd.ExecuteNonQuery();
+                }
 
-                cmd.ExecuteNonQuery();
+                // 2) Sync PhieuMuon status
+                // If money becomes 0 → Đã trả
+                // else if (first fee edit for an auto-generated penalty) → Đang nợ/thanh toán
+                using (var cmd2 = conn.CreateCommand())
+                {
+                    cmd2.Transaction = tx;
+
+                    if (newMoney == 0m)
+                    {
+                        cmd2.CommandText = "update PhieuMuon set TinhTrang = N'Đã trả' where PM_ID=@pm";
+                        cmd2.Parameters.Add(new SqlParameter("@pm", SqlDbType.Int) { Value = _pmId });
+                        cmd2.ExecuteNonQuery();
+                    }
+                    else if (newMoney != _originalMoney)
+                    {
+                        // consider it first edit only if PM is still Quá hạn
+                        cmd2.CommandText = @"
+if exists (select 1 from PhieuMuon where PM_ID=@pm and TinhTrang = N'Quá hạn')
+    update PhieuMuon set TinhTrang = N'Đang nợ/thanh toán' where PM_ID=@pm;";
+                        cmd2.Parameters.Add(new SqlParameter("@pm", SqlDbType.Int) { Value = _pmId });
+                        cmd2.ExecuteNonQuery();
+                    }
+                }
+
+                tx.Commit();
                 DialogResult = DialogResult.OK;
             }
             catch (Exception ex)

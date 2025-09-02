@@ -1,12 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.ComponentModel;
 using System.Data;
-using System.Linq;
-using System.Windows.Forms;
 using Microsoft.Data.SqlClient;
-using System.ComponentModel;
 
-namespace LibraryManagement.Forms.QuanLyPhieuMuon
+namespace LibraryManagement.Forms.PhieuMuonRelated.QuanLyPhieuMuon
 {
     public partial class ThemPhieuMuonForm : Form
     {

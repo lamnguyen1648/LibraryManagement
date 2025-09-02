@@ -1,7 +1,4 @@
-﻿using System.Drawing;
-using System.Windows.Forms;
-
-namespace LibraryManagement.Forms.QuanLyPhieuPhat
+﻿namespace LibraryManagement.Forms.PhieuMuonRelated.QuanLyPhieuPhat
 {
     partial class ThemPhieuPhatForm
     {

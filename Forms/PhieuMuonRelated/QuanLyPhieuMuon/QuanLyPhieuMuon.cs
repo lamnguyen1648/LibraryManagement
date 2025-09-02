@@ -1,20 +1,18 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Windows.Forms;
+﻿using System.Data;
+using System.Reflection;
+using LibraryManagement.Forms.PhieuMuonRelated.QuanLyPhieuPhat;
 using Microsoft.Data.SqlClient;
-// NEW: reference the PhieuPhat module so we can open its form
-using LibraryManagement.Forms.QuanLyPhieuPhat;
+// NEW
 
-namespace LibraryManagement.Forms.QuanLyPhieuMuon
+namespace LibraryManagement.Forms.PhieuMuonRelated.QuanLyPhieuMuon
 {
     public partial class QuanLyPhieuMuonForm : Form
     {
         private string? _tableName;        // "PhieuMuon"
         private string? _idColumnName;     // "PM_ID"
         private string? _searchableColumn; // prefer "TinhTrang"
+        
+        private QuanLyPhieuPhatForm? _ppForm;
 
         private readonly DataTable _pm = new();
         private readonly BindingSource _bs = new();
@@ -51,10 +49,23 @@ namespace LibraryManagement.Forms.QuanLyPhieuMuon
         // ===== Toolbar =====
         private void BtnQuanLyPhieuPhat_Click(object? s, EventArgs e)
         {
-            using var f = new QuanLyPhieuPhatForm();
-            Hide();
-            f.ShowDialog(this); Show(); Activate();
+            if (_ppForm == null || _ppForm.IsDisposed)
+            {
+                _ppForm = new QuanLyPhieuPhatForm();
+
+                _ppForm.FormClosed += (_, __) =>
+                {
+                    _ppForm = null;
+                    this.Show();
+                    this.Activate();
+                    ReloadPhieuMuon(txtSearch.Text?.Trim());
+                };
+            }
+
+            this.Hide();          // hide loans window while penalties is open
+            _ppForm.ShowDialog(this); Show(); Activate();
         }
+
 
         private void BtnThem_Click(object? s, EventArgs e)
         {
@@ -88,9 +99,93 @@ namespace LibraryManagement.Forms.QuanLyPhieuMuon
             ReloadPhieuMuon(txtSearch.Text?.Trim());
         }
 
+        // ===== Auto mark overdues & create penalties =====
+        private void AutoProcessOverdues()
+        {
+            int? nvId = GetCurrentNhanVienId(); // may be null; still mark overdue even if no NV
+            using var conn = Db.Create(); conn.Open();
+            using var tx = conn.BeginTransaction();
+
+            // 1) Update Đang mượn -> Quá hạn where NgayTra < today
+            var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = @"
+DECLARE @Today date = CAST(GETDATE() AS date);
+;WITH Overdue AS (
+    SELECT pm.PM_ID
+    FROM dbo.PhieuMuon pm
+    WHERE pm.TinhTrang = N'Đang mượn'
+      AND pm.NgayTra IS NOT NULL
+      AND CAST(pm.NgayTra AS date) < @Today
+)
+UPDATE pm
+   SET pm.TinhTrang = N'Quá hạn'
+FROM dbo.PhieuMuon pm
+JOIN Overdue o ON o.PM_ID = pm.PM_ID;
+
+-- create penalties if we know the current employee
+IF @HasNv = 1
+BEGIN
+    ;WITH Overdue AS (
+        SELECT pm.PM_ID
+        FROM dbo.PhieuMuon pm
+        WHERE pm.TinhTrang = N'Quá hạn'
+          AND pm.NgayTra IS NOT NULL
+          AND CAST(pm.NgayTra AS date) < @Today
+    )
+    INSERT INTO dbo.PhieuPhat (NV_ID, PM_ID, LyDo, SoTienPhat)
+    SELECT @nv, o.PM_ID, N'Quá hạn trả sách', 50000
+    FROM Overdue o
+    WHERE NOT EXISTS (SELECT 1 FROM dbo.PhieuPhat p WHERE p.PM_ID = o.PM_ID);
+END
+";
+            cmd.Parameters.Add(new SqlParameter("@nv",    System.Data.SqlDbType.Int) { Value = (object?)nvId ?? DBNull.Value });
+            cmd.Parameters.Add(new SqlParameter("@HasNv", System.Data.SqlDbType.Bit) { Value = nvId.HasValue ? 1 : 0 });
+
+            cmd.ExecuteNonQuery();
+            tx.Commit();
+        }
+
+        // Try to read current NV_ID from a static UserSession (no hard dependency)
+        private static int? GetCurrentNhanVienId()
+        {
+            try
+            {
+                var candidates = new[]
+                {
+                    "LibraryManagement.UserSession",
+                    "LibraryManagement.Auth.UserSession",
+                    "UserSession"
+                };
+
+                foreach (var typeName in candidates)
+                {
+                    var t = Type.GetType(typeName);
+                    if (t == null) continue;
+
+                    var pId = t.GetProperty("NV_ID", BindingFlags.Public | BindingFlags.Static)
+                           ?? t.GetProperty("NhanVienId", BindingFlags.Public | BindingFlags.Static)
+                           ?? t.GetProperty("UserId", BindingFlags.Public | BindingFlags.Static)
+                           ?? t.GetProperty("NVId", BindingFlags.Public | BindingFlags.Static);
+
+                    if (pId == null) continue;
+
+                    var idObj = pId.GetValue(null);
+                    if (idObj == null) continue;
+
+                    return Convert.ToInt32(idObj);
+                }
+            }
+            catch { /* ignore */ }
+            return null;
+        }
+
         // ===== Data =====
         private void ReloadPhieuMuon(string? search = null)
         {
+            // run automation first so the grid shows fresh statuses and penalties
+            try { AutoProcessOverdues(); } catch { /* keep UI responsive even if batch fails */ }
+
             _pm.Clear();
 
             using var conn = Db.Create();
@@ -199,7 +294,7 @@ order by c.column_id;", conn).ExecuteReader())
                     if (!map.ContainsKey(id)) map.Add(id, name);
                 }
             }
-            catch { /* ignore, we’ll fallback to id */ }
+            catch { /* ignore, fallback to id */ }
 
             return map;
         }
@@ -284,7 +379,6 @@ order by c.column_id;", conn).ExecuteReader())
 
         private void EnsureHiddenIdColumn()
         {
-            // Just in case a designer change added id columns, hide them.
             if (_idColumnName != null && dgvPhieuMuon.Columns.Contains(_idColumnName))
                 dgvPhieuMuon.Columns[_idColumnName].Visible = false;
 
@@ -294,7 +388,6 @@ order by c.column_id;", conn).ExecuteReader())
 
         private void ArrangeColumns()
         {
-            // Desired order after [Select, STT]
             int idx = 2;
             void SetIndex(string name)
             {
