@@ -31,15 +31,6 @@
       <Compile Update="Forms\QuanLyChucVu\SuaChucVuForm.cs">
         <SubType>Form</SubType>
       </Compile>
-      <Compile Update="Forms\Operations\LoginForm.cs">
-        <SubType>Form</SubType>
-      </Compile>
-      <Compile Update="Forms\Operations\MainForm.cs">
-        <SubType>Form</SubType>
-      </Compile>
-      <Compile Update="Forms\Operations\Authorization.cs">
-        <SubType>Form</SubType>
-      </Compile>
       <Compile Update="Forms\DocGiaRelated\QuanLyDocGia\QuanLyDocGiaForm.cs">
         <SubType>Form</SubType>
       </Compile>
@@ -50,9 +41,6 @@
         <SubType>Form</SubType>
       </Compile>
       <Compile Update="Forms\SachRelated\LichSuCapNhatSach\LichSuCapNhatSachForm.cs">
-        <SubType>Form</SubType>
-      </Compile>
-      <Compile Update="Forms\SachRelated\QuanLySach\BookHistoryLogger.cs">
         <SubType>Form</SubType>
       </Compile>
       <Compile Update="Forms\SachRelated\LichSuCapNhatSach\XemLichSuForm.cs">
@@ -70,19 +58,15 @@
       <Compile Update="Forms\PhieuMuonRelated\QuanLyPhieuMuon\ChiTietPhieuMuonForm.cs">
         <SubType>Form</SubType>
       </Compile>
-      <Compile Update="Forms\PhieuMuonRelated\QuanLyPhieuPhat\QuanLyPhieuPhatForm.cs">
+      <Compile Update="Forms\Authorization.cs">
         <SubType>Form</SubType>
       </Compile>
-      <Compile Update="Forms\PhieuMuonRelated\QuanLyPhieuPhat\ThemPhieuPhatForm.cs">
+      <Compile Update="Forms\LoginForm.cs">
         <SubType>Form</SubType>
       </Compile>
-      <Compile Update="Forms\PhieuMuonRelated\QuanLyPhieuPhat\SuaPhieuPhatForm.cs">
+      <Compile Update="Forms\MainForm.cs">
         <SubType>Form</SubType>
       </Compile>
-    </ItemGroup>
-
-    <ItemGroup>
-      <Folder Include="Forms\NhanVienRelated\" />
     </ItemGroup>
 
 </Project>
