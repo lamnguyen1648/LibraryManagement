@@ -6,15 +6,15 @@ namespace LibraryManagement.Forms.QuanLyChucVu
     public partial class QuanLyChucVuForm : Form
     {
         private const string TableName = "ChucVu";
-        private const string IdFallback = "CV_ID";  // typical PK
+        private const string IdFallback = "CV_ID";
         private const string NameFallback = "TenCV";
 
         private readonly DataTable _cv = new();
         private readonly BindingSource _bs = new();
 
-        private string? _idColumn;   // CV_ID | ID
-        private string? _nameColumn; // TenCV | TenChucVu | Ten
-        private string? _descColumn; // MoTa | GhiChu | Description
+        private string? _idColumn;
+        private string? _nameColumn;
+        private string? _descColumn;
 
         public QuanLyChucVuForm()
         {
@@ -46,7 +46,6 @@ namespace LibraryManagement.Forms.QuanLyChucVu
             dgvCV.DataSource = _bs;
         }
 
-        // ===== Load & schema =====
         private void EnsureSchema(SqlConnection conn)
         {
             if (_idColumn != null && _nameColumn != null) return;
@@ -85,7 +84,7 @@ namespace LibraryManagement.Forms.QuanLyChucVu
             using var da = new SqlDataAdapter(cmd);
             da.Fill(_cv);
 
-            BuildGridColumns();  // fixed order & widths
+            BuildGridColumns();
             LocalizeHeaders();
             EnsureHiddenId();
             UpdateEmptyState();
@@ -93,7 +92,6 @@ namespace LibraryManagement.Forms.QuanLyChucVu
             UpdateSttValues();
         }
 
-        // ===== Grid =====
         private void BuildGridColumns()
         {
             dgvCV.Columns.Clear();
@@ -153,7 +151,6 @@ namespace LibraryManagement.Forms.QuanLyChucVu
                     FillWeight = 35
                 });
 
-            // Any remaining columns except ID/Name/Desc
             foreach (DataColumn dc in _cv.Columns)
             {
                 var n = dc.ColumnName;
@@ -246,7 +243,6 @@ namespace LibraryManagement.Forms.QuanLyChucVu
             btnXoaNhieu.Enabled = any;
         }
 
-        // ===== Toolbar actions =====
         private void OnAdd()
         {
             using var f = new ThemChucVuForm();
@@ -275,7 +271,6 @@ namespace LibraryManagement.Forms.QuanLyChucVu
             Reload(txtSearch.Text?.Trim());
         }
 
-        // ===== Row buttons (Sửa/Xóa) =====
         private void Dgv_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
         {
             if (e.RowIndex < 0) return;

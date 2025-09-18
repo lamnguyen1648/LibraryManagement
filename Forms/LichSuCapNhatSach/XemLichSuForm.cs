@@ -31,7 +31,6 @@ namespace LibraryManagement.Forms.LichSuCapNhatSach
                 catch { return ""; }
             }
 
-            // NOTE: ID is intentionally hidden per your request.
             lblNhanVien.Text = Get("NhanVien");
             lblTenSach.Text  = Get("TenSach");
 
@@ -43,7 +42,6 @@ namespace LibraryManagement.Forms.LichSuCapNhatSach
 
             lblHinhThuc.Text = Get("HinhThucCapNhat");
 
-            // Long text into a wrapped label inside a scrollable panel
             lblChiTiet.MaximumSize = new Size(0, 0);
             lblChiTiet.Text        = Get("ChiTietCapNhat");
         }

@@ -73,7 +73,7 @@ ORDER BY ls.NgayCapNhat DESC;";
             using var da = new SqlDataAdapter(cmd);
             da.Fill(_dt);
 
-            BuildColumns(); // keep widths/order stable
+            BuildColumns();
             lblEmpty.Visible = _dt.Rows.Count == 0;
             UpdateStt();
         }
@@ -101,7 +101,6 @@ ORDER BY ls.NgayCapNhat DESC;";
                 FillWeight = 8
             });
 
-            // Hidden technical ID
             var idCol = new DataGridViewTextBoxColumn
             {
                 Name = "LichSuCapNhatSach_ID",
@@ -157,10 +156,6 @@ ORDER BY ls.NgayCapNhat DESC;";
                 FillWeight = 12
             });
 
-            // NOTE: We intentionally DO NOT add ChiTietCapNhat as a visible column,
-            // but we keep it in the DataTable so the detail viewer can show it.
-
-            // [last] Chức năng
             dgvLog.Columns.Add(new DataGridViewTextBoxColumn
             {
                 Name = "ChucNang",
@@ -184,7 +179,6 @@ ORDER BY ls.NgayCapNhat DESC;";
             }
         }
 
-        // ====== “Xem chi tiết” button drawing & click ======
         private void DgvLog_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
         {
             if (e.RowIndex < 0) return;
@@ -205,7 +199,6 @@ ORDER BY ls.NgayCapNhat DESC;";
             e.Handled = true;
         }
 
-        // inside LichSuCapNhatSachForm.cs
         private void DgvLog_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
         {
             if (e.RowIndex < 0 || e.Button != MouseButtons.Left) return;

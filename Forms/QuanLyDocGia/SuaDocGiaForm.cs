@@ -159,7 +159,6 @@ ORDER BY c.column_id;";
                 bool isDate = IsDateType(col.DataType);
                 bool isBool = IsBoolType(col.DataType);
 
-                // Label + *
                 var labelPanel = new FlowLayoutPanel
                 {
                     Dock = DockStyle.Top,
@@ -185,7 +184,6 @@ ORDER BY c.column_id;";
                 labelPanel.Controls.Add(star);
                 grid.Controls.Add(labelPanel, 0, grid.RowCount - 1);
 
-                // Input
                 Control input;
                 if (isDate)
                 {
@@ -252,7 +250,6 @@ ORDER BY c.column_id;";
             return Math.Max(0, top - 1);
         }
 
-        // ===== Bind & Validation =====
         private void BindRow()
         {
             if (_row == null) return;
@@ -358,7 +355,6 @@ ORDER BY c.column_id;";
             return false;
         }
 
-        // ===== Update =====
         private void DoUpdate()
         {
             try

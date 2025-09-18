@@ -2,7 +2,7 @@
 {
     partial class SuaChucVuForm
     {
-        private TableLayoutPanel root;   // header, grid, actions
+        private TableLayoutPanel root;
         private Label lblTitle;
         private TableLayoutPanel grid;
         private TableLayoutPanel actions;
@@ -50,8 +50,8 @@
             grid.Dock = DockStyle.Fill;
             grid.ColumnCount = 2;
             grid.RowCount = 0;
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35F)); // label + *
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 65F)); // input
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35F));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 65F));
             root.Controls.Add(grid, 0, 1);
 
             actions.Dock = DockStyle.Fill;

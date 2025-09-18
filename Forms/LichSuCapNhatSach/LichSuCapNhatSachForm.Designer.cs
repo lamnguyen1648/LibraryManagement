@@ -14,7 +14,6 @@
         private DataGridView dgvLog;
         private Label lblEmpty;
 
-        // Unique name to avoid clashes with other InitializeComponent() methods.
         private void InitializeComponent_LichSuCapNhatSach()
         {
             root = new TableLayoutPanel();
@@ -36,18 +35,16 @@
             MinimumSize = new Size(1000, 600);
             StartPosition = FormStartPosition.CenterParent;
 
-            // Root
             root.Dock = DockStyle.Fill;
             root.Padding = new Padding(12);
             root.ColumnCount = 1;
             root.RowCount = 3;
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 12F)); // header
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 10F)); // toolbar
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 78F)); // content
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 12F));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 10F));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 78F));
             Controls.Add(root);
 
-            // Header
             lblTitle.Text = "Lịch sử cập nhật sách";
             lblTitle.Dock = DockStyle.Fill;
             lblTitle.TextAlign = ContentAlignment.TopLeft;
@@ -55,15 +52,14 @@
             lblTitle.Padding = new Padding(8, 6, 8, 6);
             root.Controls.Add(lblTitle, 0, 0);
 
-            // Toolbar: [Spacer 60%][Tìm kiếm 12%][Search 28%]
             toolbar.Dock = DockStyle.Fill;
             toolbar.Padding = new Padding(0, 2, 0, 2);
             toolbar.ColumnCount = 3;
             toolbar.RowCount = 1;
             toolbar.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60F)); // spacer
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12F)); // search button
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28F)); // search box
+            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60F));
+            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12F));
+            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28F));
 
             spacer.Dock = DockStyle.Fill;
 
@@ -82,11 +78,10 @@
             toolbar.Controls.Add(txtSearch, 2, 0);
             root.Controls.Add(toolbar, 0, 1);
 
-            // Content
             contentPanel.Dock = DockStyle.Fill;
 
             dgvLog.Dock = DockStyle.Fill;
-            dgvLog.ReadOnly = true;       // no editing here
+            dgvLog.ReadOnly = true;
             dgvLog.RowHeadersVisible = false;
             dgvLog.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             dgvLog.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;

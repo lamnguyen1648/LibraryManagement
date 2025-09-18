@@ -55,7 +55,6 @@ namespace LibraryManagement.Forms.QuanLyChucVu
             btnCancel.Click += (_, __) => DialogResult = DialogResult.Cancel;
         }
 
-        // ===== Schema =====
         private void LoadSchema()
         {
             using var conn = Db.Create();
@@ -84,17 +83,15 @@ ORDER BY c.column_id;";
                     IsComputed = rd.GetBoolean(6)
                 };
 
-                if (m.IsIdentity || m.IsComputed) continue; // hide ID & computed
+                if (m.IsIdentity || m.IsComputed) continue;
                 _cols.Add(m);
                 if (!m.IsNullable) _required.Add(m.Name);
             }
 
-            // Require TenCV even if DB allows null (demo-friendly)
             if (_cols.Any(c => c.Name.Equals("TenCV", StringComparison.OrdinalIgnoreCase)))
                 _required.Add("TenCV");
         }
 
-        // ===== UI =====
         private void BuildDynamicFields()
         {
             grid.RowStyles.Clear();
@@ -110,7 +107,6 @@ ORDER BY c.column_id;";
                 bool isName = col.Name.Equals("TenCV", StringComparison.OrdinalIgnoreCase);
                 bool isLongText = IsLongText(col);
 
-                // Label + star
                 var labelPanel = new FlowLayoutPanel
                 {
                     Dock = DockStyle.Top,
@@ -136,7 +132,6 @@ ORDER BY c.column_id;";
                 labelPanel.Controls.Add(star);
                 grid.Controls.Add(labelPanel, 0, grid.RowCount - 1);
 
-                // Input
                 Control input;
                 var tb = new TextBox
                 {
@@ -160,7 +155,7 @@ ORDER BY c.column_id;";
         {
             var t = c.DataType.ToLowerInvariant();
             if (t is "text" or "ntext") return true;
-            if (t is "nvarchar" or "varchar") return c.MaxLength < 0 || c.MaxLength >= 400; // nvarchar(max) or long
+            if (t is "nvarchar" or "varchar") return c.MaxLength < 0 || c.MaxLength >= 400;
             return false;
         }
 
@@ -171,7 +166,6 @@ ORDER BY c.column_id;";
             return Math.Max(0, top - 1);
         }
 
-        // ===== Validation =====
         private void WireValidation()
         {
             foreach (var (name, c) in _controls)
@@ -234,7 +228,6 @@ ORDER BY c.column_id;";
             return false;
         }
 
-        // ===== Insert =====
         private void DoInsert()
         {
             try

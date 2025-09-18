@@ -16,7 +16,6 @@
         private DataGridView dgvDG;
         private Label lblEmpty;
 
-        // Renamed to avoid collision with another InitializeComponent()
         private void InitializeComponent_DocGia()
         {
             root = new TableLayoutPanel();
@@ -40,18 +39,16 @@
             MinimumSize = new Size(1000, 600);
             StartPosition = FormStartPosition.CenterParent;
 
-            // Root
             root.Dock = DockStyle.Fill;
             root.Padding = new Padding(12);
             root.ColumnCount = 1;
             root.RowCount = 3;
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 12F)); // header
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 10F)); // toolbar
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 78F)); // content
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 12F));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 10F));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 78F));
             Controls.Add(root);
-
-            // Header
+            
             lblTitle.Text = "Quản lý độc giả";
             lblTitle.Dock = DockStyle.Fill;
             lblTitle.TextAlign = ContentAlignment.TopLeft;
@@ -59,7 +56,6 @@
             lblTitle.Padding = new Padding(8, 6, 8, 6);
             root.Controls.Add(lblTitle, 0, 0);
 
-            // Toolbar: [Thêm 12%][Xóa nhiều 12%][Spacer 36%][Tìm kiếm 12%][Search 28%]
             toolbar.Dock = DockStyle.Fill;
             toolbar.Padding = new Padding(0, 2, 0, 2);
             toolbar.ColumnCount = 5;
@@ -110,7 +106,7 @@
             dgvDG.Dock = DockStyle.Fill;
             dgvDG.AllowUserToAddRows = false;
             dgvDG.AllowUserToDeleteRows = false;
-            dgvDG.ReadOnly = false; // checkbox editable
+            dgvDG.ReadOnly = false;
             dgvDG.MultiSelect = false;
             dgvDG.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             dgvDG.RowHeadersVisible = false;

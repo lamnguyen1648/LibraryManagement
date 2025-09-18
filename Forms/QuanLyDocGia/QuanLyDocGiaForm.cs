@@ -7,17 +7,16 @@ namespace LibraryManagement.Forms.QuanLyDocGia
     {
         private const string TableName = "DocGia";
 
-        private string? _idColumn;     // DG_ID | ID
-        private string? _nameColumn;   // TenDG | HoTen | Ten
-        private string? _emailColumn;  // Mail | Email
-        private string? _phoneColumn;  // SoDienThoai | SDT | Phone
+        private string? _idColumn;
+        private string? _nameColumn;
+        private string? _emailColumn;
+        private string? _phoneColumn;
 
         private readonly DataTable _dg = new();
         private readonly BindingSource _bs = new();
 
         public QuanLyDocGiaForm()
         {
-            // Use the renamed designer initializer (avoids InitializeComponent() ambiguity)
             InitializeComponent_DocGia();
 
             Load += (_, __) => Reload(txtSearch.Text?.Trim());
@@ -45,7 +44,6 @@ namespace LibraryManagement.Forms.QuanLyDocGia
             dgvDG.DataSource = _bs;
         }
 
-        // ===== Load & schema
         private void EnsureSchema(SqlConnection conn)
         {
             if (_idColumn != null && _nameColumn != null) return;
@@ -84,7 +82,7 @@ namespace LibraryManagement.Forms.QuanLyDocGia
             using var da = new SqlDataAdapter(cmd);
             da.Fill(_dg);
 
-            BuildGridColumns();   // fixed order & widths
+            BuildGridColumns();
             LocalizeHeaders();
             EnsureHiddenId();
             UpdateEmptyState();
@@ -92,7 +90,6 @@ namespace LibraryManagement.Forms.QuanLyDocGia
             UpdateSttValues();
         }
 
-        // ===== Grid build
         private void BuildGridColumns()
         {
             dgvDG.Columns.Clear();
@@ -111,7 +108,6 @@ namespace LibraryManagement.Forms.QuanLyDocGia
                 AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 7
             });
 
-            // [2] Hidden ID
             if (_idColumn != null && _dg.Columns.Contains(_idColumn))
             {
                 dgvDG.Columns.Add(new DataGridViewTextBoxColumn
@@ -148,18 +144,15 @@ namespace LibraryManagement.Forms.QuanLyDocGia
                     AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 19
                 });
 
-            // Any remaining columns (except hidden/sensitive)
             foreach (DataColumn dc in _dg.Columns)
             {
                 var n = dc.ColumnName;
 
-                // Skip columns already handled
                 if (_idColumn != null && n.Equals(_idColumn, StringComparison.OrdinalIgnoreCase)) continue;
                 if (_nameColumn != null && n.Equals(_nameColumn, StringComparison.OrdinalIgnoreCase)) continue;
                 if (_emailColumn != null && n.Equals(_emailColumn, StringComparison.OrdinalIgnoreCase)) continue;
                 if (_phoneColumn != null && n.Equals(_phoneColumn, StringComparison.OrdinalIgnoreCase)) continue;
 
-                // ✅ Explicitly remove Địa chỉ from the table
                 if (n.Equals("DiaChi", StringComparison.OrdinalIgnoreCase) ||
                     n.Equals("Address", StringComparison.OrdinalIgnoreCase))
                     continue;
@@ -172,7 +165,6 @@ namespace LibraryManagement.Forms.QuanLyDocGia
                 });
             }
 
-            // [last] Chức năng
             dgvDG.Columns.Add(new DataGridViewTextBoxColumn
             {
                 Name = "Function", HeaderText = "Chức năng", ReadOnly = true,
@@ -203,7 +195,7 @@ namespace LibraryManagement.Forms.QuanLyDocGia
             "tendg" or "hoten" or "ten" => "Tên độc giả",
             "mail" or "email" => "Email",
             "sodienthoai" or "dienthoai" or "sdt" or "phone" => "Số điện thoại",
-            "diachi" => "Địa chỉ", // still localized for any other use; it just won't be added to the grid
+            "diachi" => "Địa chỉ",
             "ngaysinh" => "Ngày sinh",
             _ => SplitPascal(name)
         };
@@ -243,7 +235,6 @@ namespace LibraryManagement.Forms.QuanLyDocGia
             btnXoaNhieu.Enabled = any;
         }
 
-        // ===== Toolbar actions
         private void OnAdd()
         {
             using var f = new ThemDocGiaForm();
@@ -269,7 +260,6 @@ namespace LibraryManagement.Forms.QuanLyDocGia
             Reload(txtSearch.Text?.Trim());
         }
 
-        // ===== Row buttons (Sửa/Xóa)
         private void DgvDG_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
         {
             if (e.RowIndex < 0) return;

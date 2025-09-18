@@ -34,14 +34,12 @@
 
             this.SuspendLayout();
 
-            // ---- Form ----
             this.AutoScaleDimensions = new System.Drawing.SizeF(96F, 96F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
             this.Text = "Quản lý chức vụ";
             this.MinimumSize = new System.Drawing.Size(1000, 600);
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
 
-            // ---- Root ----
             this.root.Dock = System.Windows.Forms.DockStyle.Fill;
             this.root.Padding = new System.Windows.Forms.Padding(12);
             this.root.ColumnCount = 1;
@@ -52,7 +50,6 @@
             this.root.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 78F)); // content
             this.Controls.Add(this.root);
 
-            // ---- Header ----
             this.lblTitle.Text = "Quản lý chức vụ";
             this.lblTitle.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblTitle.TextAlign = System.Drawing.ContentAlignment.TopLeft;
@@ -60,8 +57,6 @@
             this.lblTitle.Padding = new System.Windows.Forms.Padding(8, 6, 8, 6);
             this.root.Controls.Add(this.lblTitle, 0, 0);
 
-            // ---- Toolbar ----
-            // Layout: [Thêm 12%][Xóa nhiều 12%][Spacer 36%][Tìm kiếm 12%][Search 28%]
             this.toolbar.Dock = System.Windows.Forms.DockStyle.Fill;
             this.toolbar.Padding = new System.Windows.Forms.Padding(0, 2, 0, 2);
             this.toolbar.ColumnCount = 5;
@@ -106,7 +101,6 @@
             this.toolbar.Controls.Add(this.txtSearch,   4, 0);
             this.root.Controls.Add(this.toolbar, 0, 1);
 
-            // ---- Content ----
             this.contentPanel.Dock = System.Windows.Forms.DockStyle.Fill;
 
             this.dgvCV.Dock = System.Windows.Forms.DockStyle.Fill;

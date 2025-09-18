@@ -9,17 +9,14 @@ namespace LibraryManagement
         bool ValidateCredentials(string username, string password);
     }
 
-    /// <summary>Single source of truth for DB connection.</summary>
     public static class Db
     {
-        // Adjust to your environment if needed
         public const string ConnStr =
             "server=localhost\\SQLEXPRESS;database=LibraryManagement;user id=sa;password=16482548@a;encrypt=true;trustservercertificate=true;";
 
         public static SqlConnection Create() => new SqlConnection(ConnStr);
     }
 
-    /// <summary>Holds the current signed-in user.</summary>
     public static class UserSession
     {
         public static int NV_ID { get; private set; }
@@ -46,7 +43,6 @@ namespace LibraryManagement
             IsActive = false;
         }
 
-        // Convenience check you can use in UI permissions
         public static bool IsAdmin =>
             (TenChucVu != null && TenChucVu.Equals("Admin", StringComparison.OrdinalIgnoreCase)) || (CV_ID == 1);
     }
@@ -61,7 +57,6 @@ namespace LibraryManagement
                 return false;
             }
 
-            // Login can be by TenNV or Mail. We read status and role too.
             const string sql = @"
 SELECT  nv.NV_ID,
         nv.TenNV,
@@ -91,7 +86,6 @@ WHERE (nv.TenNV = @u OR nv.Mail = @u);";
             bool ok = !string.IsNullOrWhiteSpace(storedHash) &&
                       PasswordHasher.Verify(password, storedHash, out needsRehash);
 
-            // Treat disabled as wrong credentials (same UX)
             if (!ok || !active)
             {
                 UserSession.Clear();
@@ -103,12 +97,10 @@ WHERE (nv.TenNV = @u OR nv.Mail = @u);";
             int?   cvId      = rd["CV_ID"] == DBNull.Value ? null : (int?)Convert.ToInt32(rd["CV_ID"]);
             string? tenChucVu= rd["TenChucVu"] == DBNull.Value ? null : rd["TenChucVu"].ToString();
 
-            // Bind session for the whole app (history logging, permissions, etc.)
             UserSession.Set(nvId, tenNv, cvId, tenChucVu, isActive: true);
 
             rd.Close();
 
-            // Best-effort password hash upgrade if needed
             if (needsRehash)
             {
                 TryUpgradeHash(conn, nvId, PasswordHasher.HashPassword(password));
@@ -129,7 +121,6 @@ WHERE (nv.TenNV = @u OR nv.Mail = @u);";
             }
             catch
             {
-                // ignore: hash upgrade is best-effort
             }
         }
     }

@@ -141,7 +141,6 @@ ORDER BY c.column_id;";
             _row = dt.Rows[0];
         }
 
-        // ===== UI =====
         private void BuildDynamicFields()
         {
             grid.RowStyles.Clear();
@@ -156,7 +155,6 @@ ORDER BY c.column_id;";
 
                 bool isLongText = IsLongText(col);
 
-                // Label + *
                 var labelPanel = new FlowLayoutPanel
                 {
                     Dock = DockStyle.Top,
@@ -182,7 +180,6 @@ ORDER BY c.column_id;";
                 labelPanel.Controls.Add(star);
                 grid.Controls.Add(labelPanel, 0, grid.RowCount - 1);
 
-                // Input
                 var tb = new TextBox
                 {
                     AutoSize = false,
@@ -230,7 +227,6 @@ ORDER BY c.column_id;";
             return Math.Max(0, top - 1);
         }
 
-        // ===== Validation =====
         private void WireValidation()
         {
             foreach (var (name, c) in _controls)
@@ -293,7 +289,6 @@ ORDER BY c.column_id;";
             return false;
         }
 
-        // ===== Update =====
         private void DoUpdate()
         {
             try

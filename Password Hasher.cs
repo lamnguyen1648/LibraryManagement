@@ -6,8 +6,8 @@ namespace LibraryManagement
     public static class PasswordHasher
     {
         private const int DefaultIterations = 200_000;
-        private const int SaltSize = 16;  // 128-bit
-        private const int KeySize  = 32;  // 256-bit
+        private const int SaltSize = 16;
+        private const int KeySize  = 32;
 
         public static string HashPassword(string password, int? iterationsOverride = null)
         {
